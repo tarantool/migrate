@@ -110,7 +110,7 @@ struct tnt_stream *tnt_snapshot(struct tnt_stream *s)
  * 
  * returns 0 on success, or -1 on error.
 */
-int tnt_snapshot_open(struct tnt_stream *s, char *file) {
+int tnt_snapshot_open(struct tnt_stream *s, const char *file) {
 	struct tnt_stream_snapshot *ss = TNT_SSNAPSHOT_CAST(s);
 	return tnt_log_open(&ss->log, file, TNT_LOG_SNAPSHOT);
 }
@@ -160,4 +160,9 @@ char *tnt_snapshot_strerror(struct tnt_stream *s) {
 */
 int tnt_snapshot_errno(struct tnt_stream *s) {
 	return TNT_SSNAPSHOT_CAST(s)->log.errno_;
+}
+
+int tnt_snapshot_reset(struct tnt_stream *s) {
+	struct tnt_stream_snapshot *ss = TNT_SSNAPSHOT_CAST(s);
+	return tnt_log_seek(&(ss->log), ss->log.begin_offset);
 }

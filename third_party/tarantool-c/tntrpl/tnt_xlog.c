@@ -110,7 +110,7 @@ struct tnt_stream *tnt_xlog(struct tnt_stream *s)
  * 
  * returns 0 on success, or -1 on error.
 */
-int tnt_xlog_open(struct tnt_stream *s, char *file) {
+int tnt_xlog_open(struct tnt_stream *s, const char *file) {
 	struct tnt_stream_xlog *sx = TNT_SXLOG_CAST(s);
 	return tnt_log_open(&sx->log, file, TNT_LOG_XLOG);
 }
@@ -160,4 +160,9 @@ char *tnt_xlog_strerror(struct tnt_stream *s) {
 */
 int tnt_xlog_errno(struct tnt_stream *s) {
 	return TNT_SXLOG_CAST(s)->log.errno_;
+}
+
+int tnt_xlog_reset(struct tnt_stream *s) {
+	struct tnt_stream_xlog *sx = TNT_SXLOG_CAST(s);
+	return tnt_log_seek(&(sx->log), sx->log.begin_offset);
 }

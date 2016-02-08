@@ -13,7 +13,10 @@ local error = function(...)
         level = args[1]
         table.remove(args, 1)
     end
-    local err_text = fmtstring(unpack(args))
+    local stat, err_text = pcall(fmtstring, unpack(args))
+    if stat == false then
+        error(err_text, 2)
+    end
     basic_error(err_text, level)
 end
 
@@ -57,16 +60,29 @@ local traceback = function (ldepth)
 end
 
 local lazy_func = function(func, ...)
-    checkt_xc(func, 'function', 'function')
+    checkt_xc(func, 'function', 'function', 2)
     local arg = {...}
     return function()
         return func(unpack(arg))
     end
 end
 
+local function xpcall_tb_cb(elog)
+    return function(err)
+        elog:error(err)
+        elog:tb(50)
+        return err
+    end
+end
+
+local xpcall_tb = function(elog, func, ...)
+    return xpcall(lazy_func(func, ...), xpcall_tb_cb(elog))
+end
+
 return {
     error = error,
     syserror = syserror,
     traceback = traceback,
-    lazy_func = lazy_func
+    lazy_func = lazy_func,
+    xpcall_tb = xpcall_tb
 }

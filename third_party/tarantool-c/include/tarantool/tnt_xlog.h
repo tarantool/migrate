@@ -40,11 +40,13 @@ struct tnt_stream_xlog {
 
 struct tnt_stream *tnt_xlog(struct tnt_stream *s);
 
-int tnt_xlog_open(struct tnt_stream *s, char *file);
+int tnt_xlog_open(struct tnt_stream *s, const char *file);
 void tnt_xlog_close(struct tnt_stream *s);
 
 enum tnt_log_error tnt_xlog_error(struct tnt_stream *s);
 char *tnt_xlog_strerror(struct tnt_stream *s);
 int tnt_xlog_errno(struct tnt_stream *s);
+
+int tnt_xlog_reset(struct tnt_stream *s);
 
 #endif /* TNT_XLOG_H_INCLUDED */

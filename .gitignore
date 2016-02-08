@@ -15,3 +15,11 @@ install_manifest.txt
 *.so*
 *~
 .gdb_history
+.*.swp
+*.snap
+*.xlog
+*.log
+snaps
+snaps1
+xlogs
+xlogs1

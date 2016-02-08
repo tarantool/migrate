@@ -42,7 +42,7 @@
 #include <tarantool/tnt.h>
 #include <tarantool/tnt_log.h>
 
-enum tnt_log_type tnt_log_guess(char *file) {
+enum tnt_log_type tnt_log_guess(const char *file) {
 	if (file == NULL)
 		return TNT_LOG_XLOG;
 	char *ext = strrchr(file, '.');
@@ -223,7 +223,7 @@ tnt_log_open_err(struct tnt_log *l, enum tnt_log_error e) {
 }
 
 enum tnt_log_error
-tnt_log_open(struct tnt_log *l, char *file, enum tnt_log_type type)
+tnt_log_open(struct tnt_log *l, const char *file, enum tnt_log_type type)
 {
 	char filetype[32];
 	char version[32];
@@ -274,7 +274,7 @@ tnt_log_open(struct tnt_log *l, char *file, enum tnt_log_type type)
 			break;
 	}
 	/* getting current offset */
-	l->offset = ftello(l->fd);
+	l->begin_offset = l->offset = ftello(l->fd);
 	l->current_offset = 0;
 	memset(&l->current_value, 0, sizeof(l->current_value));
 	return 0;

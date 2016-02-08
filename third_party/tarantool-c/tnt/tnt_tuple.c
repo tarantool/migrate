@@ -76,8 +76,8 @@ void tnt_tuple_free(struct tnt_tuple *t) {
  * t    - tuple pointer, maybe NULL
  * data - tuple field data pointer, maybe NULL
  * size - tuple field data size, maybe zero
- * 
- * if tuple pointer is NULL, then new tuple will be created. 
+ *
+ * if tuple pointer is NULL, then new tuple will be created.
  * If tuple pointer is NULL and size is zero, then only
  * new empty tuple will be created.
  * if tuple field data is NULL, then new field would be
@@ -129,8 +129,8 @@ tnt_tuple_add(struct tnt_tuple *t, const void *data, uint32_t size)
  *
  * t   - tuple pointer, maybe NULL
  * fmt - printf-alike format (%s, %*s, %d, %l, %ll, %ul, %ull are supported)
- * 
- * if tuple pointer is NULL, then new tuple will be created. 
+ *
+ * if tuple pointer is NULL, then new tuple will be created.
  * if tuple pointer is NULL and fmt is NULL, then new empty tuple
  * will be created.
  *
@@ -179,7 +179,7 @@ tnt_tuple(struct tnt_tuple *t, const char *fmt, ...)
 			tnt_tuple_add(t, (char*)&i, sizeof(int));
 			p++;
 			break;
-		}	
+		}
 		case 'u':
 			if (*(p + 1) == 'l') {
 				if (*(p + 2) == 'l') {
@@ -249,8 +249,8 @@ static int tnt_tuple_validate(const void *buf, size_t size) {
  * t    - tuple pointer, maybe NULL
  * buf  - iproto tuple buffer representation
  * size - buffer size
- * 
- * if tuple pointer is NULL, then new tuple will be created. 
+ *
+ * if tuple pointer is NULL, then new tuple will be created.
  *
  * returns tuple pointer, or NULL on error.
 */

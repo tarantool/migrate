@@ -40,11 +40,13 @@ struct tnt_stream_snapshot {
 
 struct tnt_stream *tnt_snapshot(struct tnt_stream *s);
 
-int tnt_snapshot_open(struct tnt_stream *s, char *file);
+int tnt_snapshot_open(struct tnt_stream *s, const char *file);
 void tnt_snapshot_close(struct tnt_stream *s);
 
 enum tnt_log_error tnt_snapshot_error(struct tnt_stream *s);
 char *tnt_snapshot_strerror(struct tnt_stream *s);
 int tnt_snapshot_errno(struct tnt_stream *s);
+
+int tnt_snapshot_reset(struct tnt_stream *s);
 
 #endif /* TNT_SNAPSHOT_H_INCLUDED */

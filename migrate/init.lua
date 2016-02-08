@@ -7,10 +7,7 @@ local pickle = require('pickle')
 require('strict').on()
 
 local elog_mod = require('migrate.utils.elog')
-local elog = elog_mod({
-    path = './migrate.log',
-    level = 20
-})
+local elog = elog_mod()
 
 local error = require('migrate.utils').error
 
@@ -29,7 +26,9 @@ local xlog = require('migrate.xlog')
 local xdir = require('migrate.xdir')
 local helper = require('migrate.utils.checktype')
 local lazy_func = require('migrate.utils').lazy_func
-local checkt_xc, checkt_table_xc = helper.checkt_xc, helper.checkt_table_xc
+local checkt_xc = helper.checkt_xc
+local checkt_table_xc = helper.checkt_table_xc
+local xpcall_tb = require('migrate.utils').xpcall_tb
 
 local box_add = 2
 local box_replace = 4
@@ -57,92 +56,23 @@ local function convert_simple_config(cfg, throw)
     local iid = sid.index[cfg.index.new_id]
     local fields, default = cfg.fields, cfg.default
 
-    local function get_type(i) return fields[i] or default end
-
-    local ifields = iter(cfg.index.parts):map(get_type):totable()
-
-    local function convert_field(field, ftype)
-        if ftype == 'num' then
-            if #field == 4 then
-                return pickle.unpack('N', field)
-            elseif #field == 8 then
-                return pickle.unpack('Q', field)
-            end
-            if throw then
-                error('failed to convert string to number')
-            end
-        end
-        return field
+    local function get_type(i)
+        return fields[i] or default
     end
-
-    local function convert_tuple(tuple)
-        return enumerate(tuple):map(
-            function (i, field) return convert_field(field, get_type(i)) end
-        ):totable()
-    end
-
-    local function convert_key(key)
-        return enumerate(key):map(
-            function (i, field) return convert_field(field, ifields[i]) end
-        ):totable()
-    end
-
-    local function convert_ops(ops)
-        return iter(ops):map(
-            function (op)
-                op[#op] = convert_field(op[#op], get_type(op[2]))
-                return op
-            end
-        ):totable()
-    end
-
-    local function xpcall_cb(err) elog:tb(elog_mod.ERROR); return err end
 
     return {
+        defautls = cfg.default,
+        schema = cfg.fields,
+        ischema = iter(cfg.index.parts):map(get_type):totable(),
+
         insert = function (tuple, flags)
-            local stat, val = xpcall(lazy_func(convert_tuple, tuple), xpcall_cb)
-            if not stat then
-                elog:error("Failed to convert tuple: %s", val)
-                elog:error("Tuple: %s", tuple)
-                elog:error("Space schema: %s (default '%s')", fields, default)
-                error("Failed to convert tuple: %s", val)
-            end
-            tuple = val
-            xpcall(lazy_func(sid.replace, sid, tuple), xpcall_cb)
+            xpcall_tb(elog, sid.replace, sid, tuple)
         end,
         delete = function (key, flags)
-            local stat, val = xpcall(lazy_func(convert_key, key), xpcall_cb)
-            if not stat then
-                elog:error("Failed to convert key: %s", val)
-                elog:error("Key: %s", key)
-                elog:error("Index schema: %s", ifields)
-                error("Failed to convert key: %s", val)
-            end
-            key = val
-            xpcall(lazy_func(sid.delete, sid, key), xpcall_cb)
+            xpcall_tb(elog, sid.delete, sid, key)
         end,
         update = function (key, ops, flags)
-            local val, stat = nil, nil
-
-            stat, val = xpcall(lazy_func(convert_key, key), xpcall_cb)
-            if not stat then
-                elog:error("Failed to convert key: %s", val)
-                elog:error("Key: %s", key)
-                elog:error("Index schema: %s", ifields)
-                error("Failed to convert key: %s", val)
-            end
-            key = val
-
-            stat, val = xpcall(lazy_func(convert_ops, ops), xpcall_cb)
-            if not stat then
-                elog:error("Failed to convert ops: %s", val)
-                elog:error("Ops: %s", ops)
-                elog:error("Space schema: %s (default '%s')", fields, default)
-                error("Failed to convert ops: %s", val)
-            end
-            ops = val
-
-            xpcall(lazy_func(sid.delete, sid, key, ops), xpcall_cb)
+            xpcall_tb(elog, sid.update, sid, key, ops)
         end
     }
 end
@@ -169,23 +99,46 @@ local reader_mt = {
         local lsn = 0
         for _, file in pairs(files) do
             elog:info("opening %s", file);
-            local fd = xlog.open(file)
             if file:sub(-4) == 'snap' then
-                for k, v in fd:pairs() do
-                    if k % 100000 == 0 then
-                        elog:info('Processed %d tuples', k)
+                local stat = {xpcall_tb(elog, xlog.open, file, {
+                        spaces = self.spaces,
+                        convert = true,
+                        throws = true,
+                        batch_count = 500,
+                        return_value = 'tuple'
+                })}
+                table.remove(stat, 1)
+                local floor = 0
+                for _, rv in unpack(stat) do
+                    box.begin()
+                    if math.floor(_ / 100000) > floor then
+                        floor = math.floor(_ / 100000)
+                        elog:info('Processed %d tuples', floor * 100000)
                     end
-                    if self.spaces[v.space] then
+                    for k, v in pairs(rv) do
                         self.spaces[v.space].insert(v.tuple)
                     end
+                    box.commit()
                 end
                 lsn = xdir.xdir_lsn_from_filename(file)
             else
-                for k, v in fd:pairs() do
-                    if k % 100000 == 0 then
-                        elog:info('Processed %d requests', k)
+                local stat, val = {xpcall_tb(elog, xlog.open, file, {
+                        spaces = self.spaces,
+                        convert = true,
+                        throws = true,
+                        batch_count = 500,
+                        return_value = 'tuple'
+                })}
+                if stat[1] == false then
+                    error("failed to open '%s' for reading: %s", file, val)
+                end
+                for cnt, rv in val do
+                    if math.floor(cnt / 100000) > floor then
+                        floor = math.floor(cnt / 100000)
+                        elog:info('Processed %d tuples', floor * 100000)
                     end
-                    if self.spaces[v.space] then
+                    box.begin()
+                    for k, v in pairs(rv) do
                         if v.op == 'insert' then
                             self.spaces[v.space].insert(v.tuple, v.flags)
                         elseif v.op == 'delete' then
@@ -195,6 +148,7 @@ local reader_mt = {
                         end
                     end
                     lsn = v.lsn
+                    box.commit()
                 end
             end
         end

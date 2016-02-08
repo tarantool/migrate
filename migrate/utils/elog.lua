@@ -10,9 +10,9 @@ local error = require('migrate.utils').error
 local syserror = require('migrate.utils').syserror
 local traceback = require('migrate.utils').traceback
 
-local checktype = require('migrate.utils.checktype')
+local ct = require('migrate.utils.checktype')
 
-local checkt_xc = checktype.checkt_xc
+local checkt_xc = ct.checkt_xc
 
 local iter = require('fun').iter
 
@@ -41,8 +41,33 @@ local function elog_close(self)
     self.fd = nil
 end
 
-local function elog_traceback(self, level)
+local function convert_level(level)
     level = level or INFO
+    if type(level) == 'string' then
+        if level == 'CRITICAL' or level == 'critical' then
+            level = CRITICAL
+        elseif level == 'ERROR' or level == 'error' then
+            level = ERROR
+        elseif level == 'WARNING' or level == 'warning' then
+            level = WARNING
+        elseif level == 'INFO' or level == 'info' then
+            level = INFO
+        elseif level == 'VERBOSE' or level == 'verbose' then
+            level = VERBOSE
+        elseif level == 'DEBUG' or level == 'debug' then
+            level = DEBUG
+        else
+            error("Unknown level name: '%s'", level)
+        end
+    end
+    if type(level) == 'number' ~= true then
+        error("Unknown level type: %s", json.encode(level))
+    end
+    return level
+end
+
+local function elog_traceback(self, level)
+    level = convert_level(level)
     if self.level > level then return end
     local tb = traceback(1)
     iter(tb):each(
@@ -54,6 +79,7 @@ local function elog_traceback(self, level)
 end
 
 local function elog_log(self, level, fmt, ...)
+    level = convert_level(level)
     if self.level > level then return end
     local args = {...}
     for k, v in pairs(args) do
@@ -91,8 +117,8 @@ local elog_mt = {
 }
 
 local function elog_init(cfg)
-    checkt_xc(cfg.path, 'string', 'cfg.path')
-    checkt_xc(cfg.level, {'number', 'nil'}, 'cfg.level')
+    ct.checkt_xc(cfg.path, 'string', 'cfg.path', 2)
+    ct.checkt_xc(cfg.level, {'number', 'nil'}, 'cfg.level', 2)
     cfg.level = cfg.level or 30
     local instance = {
         path  = cfg.path,
@@ -117,11 +143,11 @@ return setmetatable({
     DEBUG = DEBUG,
 }, {
     __call = function(self, name, opts)
-        if type(name) == 'table' or type(name) == 'nil' then
+        if type(name) == 'nil' or type(name) == 'table' then
             elog_global = elog_global or elog_init(name or {})
             return elog_global
         end
-        checkt_xc(name, 'string', 'name')
+        ct.checkt_xc(name, 'string', 'name')
         elog_list['name'] = elog_list['name'] or elog_init(opts or {})
         return elog_list['name']
     end

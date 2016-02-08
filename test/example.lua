@@ -1,10 +1,17 @@
 local log = require('log')
-local migrate = require('migrate')
+local utils = require('migrate.utils')
 
 box.cfg{
---    wal_mode = 'none',
+    wal_mode = 'none',
     logger = 'tarantool.log'
 }
+
+local elog_mod = require('migrate.utils.elog')
+local elog = elog_mod({
+    path = './migrate.log',
+    level = 20
+})
+
 local s = box.schema.create_space('test_256', { if_not_exists = true })
 local i = s:create_index('primary', {
     type = 'TREE',
@@ -13,29 +20,44 @@ local i = s:create_index('primary', {
 })
 s:truncate()
 
+local migrate = require('migrate')
+
 local console = require('console')
 console.listen('3302')
--- get migrate object
-migration_object = migrate.reader({
+local val = migrate.reader({
     -- or dir = {xlog = '.', snap = '.'}
     -- dir = '.',
     dir = {
-        xlog = './xlogs',
-        snap = './snaps'
+        xlog = 'xlog',
+        snap = 'snap'
     },
     spaces = {
-        -- simple
-        [1] = {
+
+        [0] = {
             new_id = s.name,
             index = {
                 new_id = i.name,
                 parts = {1}
             },
             fields = {
-                'str', 'num', 'num'
+                'num', 'str'
             },
             default = 'str'
         },
+
+        -- simple
+--         [1] = {
+--             new_id = s.name,
+--             index = {
+--                 new_id = i.name,
+--                 parts = {1}
+--             },
+--             fields = {
+--                 'str', 'num', 'num'
+--             },
+--             default = 'str'
+--         },
+
 --         -- original SID
 --         [1] = { -- harder, with callbacks
 --             -- callback for insert request/snap tuples
@@ -52,8 +74,10 @@ migration_object = migrate.reader({
     }
 })
 
+local migration_object = val
+
 -- load and convert records from all available xlogs/snaps
-migration_object:resume()
+val:resume(val)
+val:resume(val)
 -- stop master here (downtime is going on)
 -- load and convert from remaining xlogs
-migration_object:resume()
