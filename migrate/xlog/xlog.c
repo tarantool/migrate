@@ -53,8 +53,8 @@ static void
 lual_pushkey(struct lua_State *L, struct tnt_tuple *t,
 	     struct space_def *def, int ret)
 {
-	if (ret == F_RET_TUPLE)
-		return luatu_key_fields(L, t, def);
+//	if (ret == F_RET_TUPLE)
+//		return luatu_key_fields(L, t, def);
 	return luata_key_fields(L, t, def);
 }
 
@@ -62,8 +62,8 @@ static void
 lual_pushops(struct lua_State *L, struct tnt_request_update *req,
 	     struct space_def *def, int ret)
 {
-	if (ret == F_RET_TUPLE)
-		return luatu_ops_fields(L, req, def);
+//	if (ret == F_RET_TUPLE)
+//		return luatu_ops_fields(L, req, def);
 	return luata_ops_fields(L, req, def);
 }
 
@@ -149,15 +149,14 @@ lua_xlog_pairs(struct lua_State *L)
 	int batch_count = 0;
 
 	lua_newtable(L);
-	while (tnt_next(pi) && batch_count < hlp->batch_count) {
-		lua_pushinteger(L, batch_count);
-		lua_newtable(L);
+	while (batch_count < hlp->batch_count && tnt_next(pi)) {
+		lua_pushinteger(L, batch_count + 1);
 		struct tnt_request *r = TNT_IREQUEST_PTR(pi);
 		struct tnt_log_row *row =
 			&(TNT_SXLOG_CAST(TNT_IREQUEST_STREAM(pi))->log.current);
-		if (row->hdr.lsn < hlp->lsn_from &&
+		if (row->hdr.lsn < hlp->lsn_from ||
 		    row->hdr.lsn > hlp->lsn_to) {
-			lua_pop(L, 2);
+			lua_pop(L, 1);
 			continue;
 		}
 
@@ -197,10 +196,9 @@ lua_xlog_pairs(struct lua_State *L)
 		luaL_error(L, "parsing failed: %s", errstr);
 	}
 
-	if (batch_count == 0) return 0;
+	if (batch_count == 0)
+		return 0;
 
-	lua_pushinteger(L, n + batch_count);
-	lua_replace(L, -3);
 	return 2;
 }
 
@@ -217,18 +215,18 @@ lua_snap_pairs(struct lua_State *L)
 	lua_pushinteger(L, n + 1);
 
 	struct tnt_iter *pi = hlp->iter;
-	int batch_count = 1;
+	int batch_count = 0;
 	struct space_def *def = NULL;
 
 	lua_newtable(L);
-	while (tnt_next(pi) && batch_count <= hlp->batch_count) {
-		lua_pushinteger(L, batch_count);
+	while (batch_count < hlp->batch_count && tnt_next(pi)) {
+		lua_pushinteger(L, batch_count + 1);
 		lua_newtable(L);
 
 		struct tnt_log_row *row =
 			&(TNT_SSNAPSHOT_CAST(TNT_ISTORAGE_STREAM(pi))->log.current);
 		uint32_t space = row->row_snap.space;
-		if (!space || space != def->space_no)
+		if (!def || space != def->space_no)
 			def = search_space(hlp, space);
 		if (!def && hlp->spaces) {
 			lua_pop(L, 2);
@@ -250,10 +248,9 @@ lua_snap_pairs(struct lua_State *L)
 		luaL_error(L, "parsing failed: %s", errstr);
 	}
 
-	if (batch_count == 0) return 0;
+	if (batch_count == 0)
+		return 0;
 
-	lua_pushinteger(L, n + batch_count);
-	lua_replace(L, -3);
 	return 2;
 }
 
@@ -271,6 +268,6 @@ luaopen_migrate_xlog_internal(struct lua_State *L)
 	CTID_STRUCT_ITER_HELPER_REF = luaL_ctypeid(L, "struct iter_helper [1]");
 	luaL_register(L, parser_lib_name, parser_lib_func);
 	tuple_format = box_tuple_format_default();
-	// assert(tuple_format);
+	/* assert(tuple_format); */
 	return 1;
 }

@@ -2,7 +2,6 @@ local log = require('log')
 local utils = require('migrate.utils')
 
 box.cfg{
-    wal_mode = 'none',
     logger = 'tarantool.log'
 }
 
@@ -33,30 +32,30 @@ local val = migrate.reader({
     },
     spaces = {
 
-        [0] = {
-            new_id = s.name,
-            index = {
-                new_id = i.name,
-                parts = {1}
-            },
-            fields = {
-                'num', 'str'
-            },
-            default = 'str'
-        },
-
-        -- simple
---         [1] = {
+--         [0] = {
 --             new_id = s.name,
 --             index = {
 --                 new_id = i.name,
 --                 parts = {1}
 --             },
 --             fields = {
---                 'str', 'num', 'num'
+--                 'num', 'str'
 --             },
 --             default = 'str'
 --         },
+
+        -- simple
+        [1] = {
+            new_id = s.name,
+            index = {
+                new_id = i.name,
+                parts = {1}
+            },
+            fields = {
+                'str', 'num', 'num'
+            },
+            default = 'str'
+        },
 
 --         -- original SID
 --         [1] = { -- harder, with callbacks

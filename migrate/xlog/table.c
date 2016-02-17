@@ -21,12 +21,12 @@ lua_field_encode(struct lua_State *L, const char *data, size_t size,
 	if (tp == F_FLD_NUM && size == 4) {
 		lua_pushnumber(L, *((uint32_t*)data));
 	} else if (tp == F_FLD_NUM && size == 8) {
-		lua_pushnumber(L, *((uint64_t*)data));
+		luaL_pushuint64(L, *((uint64_t*)data));
 	} else {
 		if (tp == F_FLD_NUM && throws)
 			luaL_error(L, "Cannot convert field '%.*s' to type NUM,"
 				      " exptected len 4 or 8, got '%zd'",
-				      data, size);
+				      size, data, size);
 		lua_pushlstring(L, data, size);
 	}
 }
@@ -128,8 +128,7 @@ luata_ops_fields(struct lua_State *L, struct tnt_request_update *req,
 		if (op->op >= TNT_UPDATE_MAX)
 			luaL_error(L, "undefined update operation");
 		lua_settable_ns(L, 1, update_op_records[op->op].operation, -1);
-		lua_settable_nn(L, 2, op->field, -1);
-		lua_pushnumber(L, 3);
+		lua_settable_nn(L, 2, op->field + 1, -1);
 		char *data = op->data;
 		uint32_t size = op->size;
 		switch (op->op) {

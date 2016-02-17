@@ -6,8 +6,8 @@ local pickle = require('pickle')
 
 require('strict').on()
 
-local elog_mod = require('migrate.utils.elog')
-local elog = elog_mod()
+-- local elog_mod = require('migrate.utils.elog')
+-- local elog = elog_mod()
 
 local error = require('migrate.utils').error
 
@@ -66,13 +66,29 @@ local function convert_simple_config(cfg, throw)
         ischema = iter(cfg.index.parts):map(get_type):totable(),
 
         insert = function (tuple, flags)
-            xpcall_tb(elog, sid.replace, sid, tuple)
+            local stat, err = pcall(sid.replace, sid, tuple)
+            if not stat then
+                log.error("Error while replacing: %s", err)
+                log.error("Tuple was: %s", yaml.encode(tuple))
+                error(2, "Error while replacing: " .. err)
+            end
         end,
         delete = function (key, flags)
-            xpcall_tb(elog, sid.delete, sid, key)
+            local stat, err = pcall(sid.delete, sid, key)
+            if not stat then
+                log.error("Error while deleting: %s", err)
+                log.error("Key was: %s", yaml.encode(tuple))
+                error(2, "Error while deleting: " .. err)
+            end
         end,
         update = function (key, ops, flags)
-            xpcall_tb(elog, sid.update, sid, key, ops)
+            local stat, err = pcall(sid.update, sid, key, ops)
+            if not stat then
+                log.error("Error while updating: %s", err)
+                log.error("Key was: %s", yaml.encode(key))
+                log.error("Ops were: %s", yaml.encode(ops))
+                error(2, "Error while updating: " .. err)
+            end
         end
     }
 end
@@ -90,55 +106,53 @@ end
 
 local reader_mt = {
     resume = function (self)
-        local files
+        local files = nil
         if self.lsn == 0 then
             _, files = xdir.xdir(self.snap_dir, self.xlog_dir)
         else
-            _, files = xdir.xdir_lsn(self.xlog_dir, self.lsn)
+            files = xdir.xdir_xlogs_after_lsn(self.xlog_dir, self.lsn)
         end
-        local lsn = 0
+        local lsn = self.lsn
         for _, file in pairs(files) do
-            elog:info("opening %s", file);
+            local processed, floor = 0, 0
+            log.info("opening '%s'", file)
             if file:sub(-4) == 'snap' then
-                local stat = {xpcall_tb(elog, xlog.open, file, {
+                --log.info(yaml.encode(self.spaces))
+                for _, rv in xlog.open(file, {
                         spaces = self.spaces,
                         convert = true,
-                        throws = true,
+                        throw = true,
                         batch_count = 500,
-                        return_value = 'tuple'
-                })}
-                table.remove(stat, 1)
-                local floor = 0
-                for _, rv in unpack(stat) do
+                        return_type = 'tuple'
+                }) do
                     box.begin()
-                    if math.floor(_ / 100000) > floor then
-                        floor = math.floor(_ / 100000)
-                        elog:info('Processed %d tuples', floor * 100000)
-                    end
                     for k, v in pairs(rv) do
+                        -- log.info("process tuple")
                         self.spaces[v.space].insert(v.tuple)
                     end
                     box.commit()
+                    processed = processed + #rv
+                    if math.floor(processed / 100000) > floor then
+                        floor = math.floor(processed / 100000)
+                        log.info("Processed %.1fM tuples", floor/10)
+                    end
                 end
-                lsn = xdir.xdir_lsn_from_filename(file)
+                lsn = xdir.lsn_from_filename(file)
             else
-                local stat, val = {xpcall_tb(elog, xlog.open, file, {
+                local floor = 0
+                log.info("Starting from LSN " .. tostring(lsn + 1))
+                --log.info(yaml.encode(self.spaces))
+                for _, rv in xlog.open(file, {
                         spaces = self.spaces,
                         convert = true,
-                        throws = true,
+                        throw = true,
                         batch_count = 500,
-                        return_value = 'tuple'
-                })}
-                if stat[1] == false then
-                    error("failed to open '%s' for reading: %s", file, val)
-                end
-                for cnt, rv in val do
-                    if math.floor(cnt / 100000) > floor then
-                        floor = math.floor(cnt / 100000)
-                        elog:info('Processed %d tuples', floor * 100000)
-                    end
+                        return_type = 'tuple',
+                        lsn_from = lsn + 1
+                }) do
                     box.begin()
                     for k, v in pairs(rv) do
+                        --log.info("process row")
                         if v.op == 'insert' then
                             self.spaces[v.space].insert(v.tuple, v.flags)
                         elseif v.op == 'delete' then
@@ -146,21 +160,26 @@ local reader_mt = {
                         elseif v.op == 'update' then
                             self.spaces[v.space].update(v.key, v.ops, v.flags)
                         end
+                        lsn = v.lsn
                     end
-                    lsn = v.lsn
                     box.commit()
+                    processed = processed + #rv
+                    if math.floor(processed / 100000) > floor then
+                        floor = math.floor(processed / 100000)
+                        log.info("Processed %.1fM row", floor/10)
+                    end
                 end
             end
+            self.lsn = lsn
         end
-        self.lsn = lsn
     end
 }
 
 local function reader(cfg)
     checkt_xc(cfg, 'table', 'config')
     -- verify error flag
-    cfg.error = cfg.error or true
-    checkt_xc(cfg.error, 'boolean', 'error')
+    cfg.throw = cfg.throw or true
+    checkt_xc(cfg.throw, 'boolean', 'error')
     -- verifying directory configuration
     local xlog_dir, snap_dir = nil, nil
     if type(cfg.dir) == 'table' then
@@ -184,7 +203,7 @@ local function reader(cfg)
     local self = setmetatable({
         lsn = 0,
         spaces = space_def,
-        throw = cfg.error,
+        throw = cfg.throw,
         xlog_dir = xlog_dir,
         snap_dir = snap_dir
     }, {

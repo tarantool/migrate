@@ -5,6 +5,7 @@ local json = require('json')
 local utils = require('migrate.utils')
 local ct = require('migrate.utils.checktype')
 local elog = require('migrate.utils.elog')
+local log = require('log')
 
 local wrap = fun.wrap
 local iter = fun.iter
@@ -18,6 +19,10 @@ local UINT64_MAX = 18446744073709551615ULL
 -- ffi.load(package.searchpath('migrate.xlog.libtarantool', package.cpath), true)
 -- ffi.load(package.searchpath('migrate.xlog.libtarantoolrpl', package.cpath), true)
 ffi.load(package.searchpath('migrate.xlog.internal', package.cpath), true)
+
+local function man_gc(object)
+    log.debug("GC'ed %s", tostring(object))
+end
 
 ffi.cdef[[
 struct tnt_iter;
@@ -41,7 +46,7 @@ struct space_def {
     uint32_t schema_len;
     uint32_t ischema_len;
     int def;
-    int throws;
+    int throw;
     int convert;
     struct space_def *next;
 };
@@ -99,6 +104,8 @@ struct tnt_iter *tnt_iter_request(struct tnt_iter *i, struct tnt_stream *s);
 struct tnt_iter *tnt_iter_storage(struct tnt_iter *i, struct tnt_stream *s);
 void tnt_iter_free(struct tnt_iter *i);
 
+void *malloc(size_t size);
+
 ]]
 
 local internal = require('migrate.xlog.internal')
@@ -121,10 +128,14 @@ local function fields_convert(schema)
     return iter(schema):map(function (fld) return field_convert(fld) end)
 end
 
-local function checkt_spaces_table_xc(spaces, ext, convert, throws)
+hold = {}
+
+local function checkt_spaces_table_xc(spaces, ext, convert, throw)
     local rv = {}
     for id, v in pairs(spaces) do
-        local space_def = ffi.new(space_def_t)
+        local space_def = ffi.gc(ffi.new(space_def_t), man_gc)
+        table.insert(hold, space_def)
+        log.debug("AL'ed " .. tostring(space_def))
         if not type(id) == 'number' then
             error("Bad 'space_id' type, expected 'number', got '%s' (%s)",
                   type(id), id)
@@ -133,22 +144,30 @@ local function checkt_spaces_table_xc(spaces, ext, convert, throws)
         if convert then
             checkt_xc(v, 'table', 'bad space description')
             checkt_xc(v.schema, 'table', 'bad schema field')
-            space_def[0].throws = throws or false
+            space_def[0].throw = throw or false
             if ext == 'xlog' then
                 checkt_xc(v.ischema, 'table', 'bad ischema field')
-                space_def[0].ischema = ffi.new(int_arr_t, #v.ischema)
+                local ischema = ffi.new(int_arr_t, #v.ischema)
+                table.insert(hold, ischema)
+                space_def[0].ischema = ffi.gc(ischema, man_gc)
+                log.debug("AL'ed " .. tostring(space_def[0].ischema))
                 fields_convert(v.ischema):enumerate():each(
                     function (k, v)
                         space_def[0].ischema[k - 1] = v
                     end
                 )
+                space_def[0].ischema_len = #v.ischema
             end
-            space_def[0].schema = ffi.new(int_arr_t, #v.schema)
+            local schema = ffi.new(int_arr_t, #v.schema)
+            space_def[0].schema = ffi.gc(schema, man_gc)
+            table.insert(hold, schema)
+            log.debug("AL'ed " .. tostring(space_def[0].schema))
             fields_convert(v.schema):enumerate():each(
                 function (k, v)
                     space_def[0].schema[k - 1] = v
                 end
             )
+            space_def[0].schema_len = #v.schema
             space_def[0].def = field_convert(v.default)
         end
         space_def[0].convert = convert
@@ -178,12 +197,13 @@ config { -- table
     convert = true/false, -- (NYI) - convert tuple fields or not
     return_type = 'tuple'/'table', -- (NYI) - retval of tuples/keys.
     batch_count -- (NYI) - number of tuples to load at 1 batch
-    throws = true/false/nil (NYI) - throw error if can't convert field
+    throw = true/false/nil (NYI) - throw error if can't convert field
     -- for xlog
     lsn_from = (number)
-    lsn_to   = (number)
+    lsn_to   = (number)/
 }
 ]]--
+
 local function parse_cfg(cfg, ext, iter)
     cfg = cfg or {}
     checkt_xc(cfg, 'table', 'config')
@@ -194,7 +214,7 @@ local function parse_cfg(cfg, ext, iter)
     end
     checkt_xc(cfg.return_type, {'string', 'nil'}, 'config.return_type')
     checkt_xc(cfg.batch_count, {'number', 'nil'}, 'config.batch_count')
-    checkt_xc(cfg.throws, {'boolean', 'nil'}, 'config.throws')
+    checkt_xc(cfg.throw, {'boolean', 'nil'}, 'config.throw')
     checkt_xc(cfg.lsn_from, {'number', 'nil'}, 'config.lsn_from')
     checkt_xc(cfg.lsn_to, {'number', 'nil'}, 'config.lsn_to')
 
@@ -209,6 +229,9 @@ local function parse_cfg(cfg, ext, iter)
     if return_type == 'table' or return_type == 'TABLE' then
         helper[0].return_type = ffi.C.F_RET_TABLE
     elseif return_type == 'tuple' or return_type == 'TUPLE' then
+        if type(box.cfg) == 'function' then
+            error("Tuples are expected, but 'box.cfg' is not inited", 3)
+        end
         helper[0].return_type = ffi.C.F_RET_TUPLE
     else
         error("bad 'config.return_type' value, expected 'table'/'tuple', got '%s'",
@@ -219,6 +242,9 @@ local function parse_cfg(cfg, ext, iter)
     if cfg.spaces then
         space_def_arr = checkt_spaces_table_xc(cfg.spaces, ext, convert, cfg.throw)
         for _, v in ipairs(space_def_arr) do
+            table.insert(hold, v[0])
+            table.insert(hold, v[0].schema)
+            table.insert(hold, v[0].ischema)
             if last == nil then
                 helper[0].spaces = v
             else
@@ -227,9 +253,10 @@ local function parse_cfg(cfg, ext, iter)
             last = v
         end
     end
-    local hold = {iter, space_def_arr}
+    table.insert(hold, iter)
     local function gc_hold(obj)
         -- Temporary hack for gc (do not give GC to sweep space_def/iter)
+        log.debug("hold object is destroyed")
         return hold
     end
     ffi.gc(helper, gc_hold)
