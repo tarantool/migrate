@@ -4,7 +4,6 @@ local json = require('json')
 
 local utils = require('migrate.utils')
 local ct = require('migrate.utils.checktype')
-local elog = require('migrate.utils.elog')
 local log = require('log')
 
 local wrap = fun.wrap

@@ -33,6 +33,8 @@ include_directories("${PROJECT_SOURCE_DIR}/third_party/")
 
 add_subdirectory(third_party)
 add_subdirectory(migrate)
+
+enable_testing()
 add_subdirectory(test)
 
 # add_custom_target(test

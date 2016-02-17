@@ -6,9 +6,6 @@ local pickle = require('pickle')
 
 require('strict').on()
 
--- local elog_mod = require('migrate.utils.elog')
--- local elog = elog_mod()
-
 local error = require('migrate.utils').error
 
 local _ = nil
@@ -34,24 +31,10 @@ local box_add = 2
 local box_replace = 4
 local box_both = bit.bor(box_add, box_replace)
 
-local function verify_space_def_advance(config)
-    checkt_xc(config, 'table', 'config')
-    checkt_xc(config.insert, 'function', 'config.insert')
-    checkt_xc(config.delete, 'function', 'config.delete')
-    checkt_xc(config.update, 'function', 'config.update')
+local function verify_space_definition(cfg)
 end
 
-local function verify_space_def_simple(config)
-    checkt_xc(config, 'table', 'config')
-    checkt_xc(config.new_id, {'number', 'string'}, 'config.new_id')
-    checkt_table_xc(config.fields, 'string', 'config.fields')
-    checkt_xc(config.default, 'string', 'config.default')
-    checkt_xc(config.index, 'table', 'config.index')
-    checkt_xc(config.index.new_id, {'number', 'string'}, 'config.index.new_id')
-    checkt_table_xc(config.index.parts, 'number', 'config.index.parts')
-end
-
-local function convert_simple_config(cfg, throw)
+local function convert_cfg(cfg)
     local sid = box.space[cfg.new_id]
     local iid = sid.index[cfg.index.new_id]
     local fields, default = cfg.fields, cfg.default
@@ -60,48 +43,65 @@ local function convert_simple_config(cfg, throw)
         return fields[i] or default
     end
 
+    local insert_cb = cfg.insert or function (tuple, flags)
+        local stat, err = pcall(sid.replace, sid, tuple)
+        if not stat then
+            log.error("Error while replacing: %s", err)
+            log.error("Tuple was: %s", yaml.encode(tuple))
+            if cfg.throw then
+                error(2, "Error while replacing: " .. err)
+            end
+        end
+    end
+
+    local delete_cb = cfg.delete or function (key, flags)
+        local stat, err = pcall(sid.delete, sid, key)
+        if not stat then
+            log.error("Error while deleting: %s", err)
+            log.error("Key was: %s", yaml.encode(tuple))
+            if cfg.throw then
+                error(2, "Error while deleting: " .. err)
+            end
+        end
+    end
+
+    local update_cb = cfg.update or function (key, ops, flags)
+        local stat, err = pcall(sid.update, sid, key, ops)
+        if not stat then
+            log.error("Error while updating: %s", err)
+            log.error("Key was: %s", yaml.encode(key))
+            log.error("Ops were: %s", yaml.encode(ops))
+            if cfg.throw then
+                error(2, "Error while updating: " .. err)
+            end
+        end
+    end
+
     return {
         defautls = cfg.default,
         schema = cfg.fields,
         ischema = iter(cfg.index.parts):map(get_type):totable(),
 
-        insert = function (tuple, flags)
-            local stat, err = pcall(sid.replace, sid, tuple)
-            if not stat then
-                log.error("Error while replacing: %s", err)
-                log.error("Tuple was: %s", yaml.encode(tuple))
-                error(2, "Error while replacing: " .. err)
-            end
-        end,
-        delete = function (key, flags)
-            local stat, err = pcall(sid.delete, sid, key)
-            if not stat then
-                log.error("Error while deleting: %s", err)
-                log.error("Key was: %s", yaml.encode(tuple))
-                error(2, "Error while deleting: " .. err)
-            end
-        end,
-        update = function (key, ops, flags)
-            local stat, err = pcall(sid.update, sid, key, ops)
-            if not stat then
-                log.error("Error while updating: %s", err)
-                log.error("Key was: %s", yaml.encode(key))
-                log.error("Ops were: %s", yaml.encode(ops))
-                error(2, "Error while updating: " .. err)
-            end
-        end
+        insert = insert_cb,
+        delete = delete_cb,
+        update = update_cb
     }
 end
 
-local function verify_space_def(space_id, config)
+local function verify_space_definition(space_id, cfg)
     checkt_xc(space_id, 'number', 'space_id')
-    if config.new_id then
-        verify_space_def_simple(config)
-        config = convert_simple_config(config)
-    else
-        verify_space_def_advance(config)
-    end
-    return config
+    checkt_xc(cfg, 'table', 'config')
+    checkt_xc(cfg.new_id, {'number', 'string'}, 'config.new_id')
+    checkt_table_xc(cfg.fields, 'string', 'config.fields')
+    checkt_xc(cfg.default, 'string', 'config.default')
+    checkt_xc(cfg.index, 'table', 'config.index')
+    checkt_xc(cfg.index.new_id, {'number', 'string'}, 'config.index.new_id')
+    checkt_table_xc(cfg.index.parts, 'number', 'config.index.parts')
+    checkt_xc(cfg.insert, {'function', 'nil'}, 'config.insert')
+    checkt_xc(cfg.delete, {'function', 'nil'}, 'config.delete')
+    checkt_xc(cfg.update, {'function', 'nil'}, 'config.update')
+    cfg = convert_cfg(cfg)
+    return cfg
 end
 
 local reader_mt = {
@@ -113,24 +113,23 @@ local reader_mt = {
             files = xdir.xdir_xlogs_after_lsn(self.xlog_dir, self.lsn)
         end
         local lsn = self.lsn
+        local overall = 0
         for _, file in pairs(files) do
             local processed, floor = 0, 0
             log.info("opening '%s'", file)
             if file:sub(-4) == 'snap' then
-                --log.info(yaml.encode(self.spaces))
                 for _, rv in xlog.open(file, {
                         spaces = self.spaces,
                         convert = true,
-                        throw = true,
-                        batch_count = 500,
-                        return_type = 'tuple'
+                        throw = self.throw,
+                        batch_count = self.batch_count,
+                        return_type = self.return_type
                 }) do
-                    box.begin()
+                    if self.commit then box.begin() end
                     for k, v in pairs(rv) do
-                        -- log.info("process tuple")
-                        self.spaces[v.space].insert(v.tuple)
+                        self.spaces[v.space].insert(v.tuple, 0)
                     end
-                    box.commit()
+                    if self.commit then box.commit() end
                     processed = processed + #rv
                     if math.floor(processed / 100000) > floor then
                         floor = math.floor(processed / 100000)
@@ -140,19 +139,17 @@ local reader_mt = {
                 lsn = xdir.lsn_from_filename(file)
             else
                 local floor = 0
-                log.info("Starting from LSN " .. tostring(lsn + 1))
-                --log.info(yaml.encode(self.spaces))
+                log.info("Starting from lsn " .. tostring(lsn + 1))
                 for _, rv in xlog.open(file, {
                         spaces = self.spaces,
                         convert = true,
-                        throw = true,
-                        batch_count = 500,
-                        return_type = 'tuple',
+                        throw = self.throw,
+                        batch_count = self.batch_count,
+                        return_type = self.return_type,
                         lsn_from = lsn + 1
                 }) do
-                    box.begin()
+                    if self.commit then box.begin() end
                     for k, v in pairs(rv) do
-                        --log.info("process row")
                         if v.op == 'insert' then
                             self.spaces[v.space].insert(v.tuple, v.flags)
                         elseif v.op == 'delete' then
@@ -162,7 +159,7 @@ local reader_mt = {
                         end
                         lsn = v.lsn
                     end
-                    box.commit()
+                    if self.commit then box.commit() end
                     processed = processed + #rv
                     if math.floor(processed / 100000) > floor then
                         floor = math.floor(processed / 100000)
@@ -170,8 +167,10 @@ local reader_mt = {
                     end
                 end
             end
+            overall = overall + processed
             self.lsn = lsn
         end
+    return overall
     end
 }
 
@@ -180,6 +179,18 @@ local function reader(cfg)
     -- verify error flag
     cfg.throw = cfg.throw or true
     checkt_xc(cfg.throw, 'boolean', 'error')
+    -- verify commit flag
+    cfg.commit = cfg.commit or true
+    checkt_xc(cfg.commit, 'boolean', 'commit')
+    -- check type of return value
+    cfg.return_type = cfg.return_type or 'tuple'
+    if cfg.return_type ~= 'table' and cfg.return_type ~= 'tuple' then
+        error(2, "Bad value of cfg.return_type. Expected 'table'/'tuple', " ..
+                 "got %s", tostring(cfg.return_type))
+    end
+    -- check type of batch_count
+    cfg.batch_count = cfg.batch_count or 500
+    checkt_xc(cfg.batch_count, 'number', 'batch_count')
     -- verifying directory configuration
     local xlog_dir, snap_dir = nil, nil
     if type(cfg.dir) == 'table' then
@@ -196,7 +207,7 @@ local function reader(cfg)
     checkt_xc(cfg.spaces, 'table', 'spaces')
     local space_def = {}
     for k, v in pairs(cfg.spaces) do
-        space_def[k] = verify_space_def(k, v)
+        space_def[k] = verify_space_definition(k, v)
     end
 
     -- start work
@@ -204,6 +215,9 @@ local function reader(cfg)
         lsn = 0,
         spaces = space_def,
         throw = cfg.throw,
+        commit = cfg.commit,
+        return_type = cfg.return_type,
+        batch_count = cfg.batch_count,
         xlog_dir = xlog_dir,
         snap_dir = snap_dir
     }, {

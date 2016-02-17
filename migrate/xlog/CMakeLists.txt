@@ -17,4 +17,4 @@ target_link_libraries(xlog tnt)
 target_link_libraries(xlog small)
 
 install(TARGETS xlog LIBRARY DESTINATION ${TARANTOOL_LIBDIR}/migrate/xlog/)
-install(FILES init.lua DESTINATION ${TARANTOOL_LUADIR}/migrate/xlog/)
+install(FILES init.lua       DESTINATION ${TARANTOOL_LUADIR}/migrate/xlog/)

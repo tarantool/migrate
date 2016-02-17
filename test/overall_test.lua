@@ -1,6 +1,10 @@
+local console = require('console')
+console.listen('3302')
+local yaml = require('yaml')
+
 box.cfg{
     wal_mode = 'none',
-    logger = 'tarantool.log'
+--    logger = 'tarantool.log'
 }
 
 local s_0 = box.schema.create_space('test_256', { if_not_exists = true })
@@ -21,8 +25,6 @@ s_2:truncate()
 
 local migrate = require('migrate')
 
-local console = require('console')
-console.listen('3302')
 local val = migrate.reader({
     -- or dir = {xlog = '.', snap = '.'}
     -- dir = '.',
@@ -35,7 +37,7 @@ local val = migrate.reader({
                 parts = {1}
             },
             fields = {'str', 'num', 'num'},
-            default = 'str'
+            default = 'str',
         },
         [2] = {
             new_id = s_2.name,
@@ -44,7 +46,7 @@ local val = migrate.reader({
                 parts = {1}
             },
             fields = {'num', 'str', 'num'},
-            default = 'str'
+            default = 'str',
         },
     }
 })

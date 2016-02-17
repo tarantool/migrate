@@ -1,3 +1,4 @@
+local log = require('log')
 local errno = require('errno')
 
 local checkt_xc = require('migrate.utils.checktype').checkt_xc
@@ -67,16 +68,18 @@ local lazy_func = function(func, ...)
     end
 end
 
-local function xpcall_tb_cb(elog)
-    return function(err)
-        elog:error(err)
-        elog:tb(50)
-        return err
-    end
+local function xpcall_tb_cb(err)
+    log.error("Error catched: %s", err)
+    iter(traceback(1)):each(
+        function(f)
+            local name = f.name and fmtstring(" function '%s'", f.name) or ''
+            log.error("[%-4s]%s at <%s:%d>", f.what, name, f.file, f.line)
+        end
+    )
 end
 
-local xpcall_tb = function(elog, func, ...)
-    return xpcall(lazy_func(func, ...), xpcall_tb_cb(elog))
+local xpcall_tb = function(func, ...)
+    return xpcall(lazy_func(func, ...), xpcall_tb_cb)
 end
 
 return {

@@ -69,7 +69,6 @@ build = {
         ['migrate'] = 'migrate/init.lua',
         ['migrate.xdir'] = 'migrate/xdir.lua',
         ['migrate.utils.checktype'] = 'migrate/utils/checktype.lua',
-        ['migrate.utils.elog'] = 'migrate/utils/elog.lua',
         ['migrate.utils'] = 'migrate/utils/init.lua'
     }
 }
