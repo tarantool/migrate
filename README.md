@@ -1,3 +1,7 @@
+<a href="http://tarantool.org">
+  <img src="https://avatars2.githubusercontent.com/u/2344919?v=2&s=250" align="right">
+</a>
+
 # migrate - a [Tarantool][] rock for a migration from Tarantool 1.5 to 1.6
 
 ## Getting Started
@@ -201,4 +205,5 @@ TODO: Document this
 * [Tests][]
 
 [Tarantool]: http://github.com/tarantool/tarantool
+[Documentation]: http://tarantool.org/doc/
 [Tests]: https://github.com/bigbes/migrate/tree/master/test
