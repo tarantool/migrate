@@ -28,22 +28,24 @@
  * SUCH DAMAGE.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <math.h>
 
 #include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <limits.h>
 
 #include <tarantool/tnt.h>
 #include <tarantool/tnt_net.h>
@@ -57,27 +59,124 @@
 #	define MIN(a, b) (a) < (b) ? (a) : (b)
 #endif /* !defined(MIN) */
 
+const int64_t micro = 1000000;
+
+static double
+tv_to_double(struct timeval *tv) {
+	double converted = (double )tv->tv_sec + (double )tv->tv_usec / micro;
+	return converted;
+}
+
+static void
+update_timeout(struct timeval *start, double *timeout) {
+	(void)start;
+	struct timeval now = {0, 0};
+	assert(gettimeofday(&now, NULL) == 0);
+	*timeout -= tv_to_double(&now);
+}
+
+/**
+ * Blocking by default
+ * Slow, because 'select' is used
+ **/
+enum tnt_error
+iowait_cb_default(int fd, int *event, double tm)
+{
+	int64_t passd_usec, curr_timeout;
+	int64_t timeout_usec = floor(tm) * micro;
+	struct timeval start, timeout;
+	if (gettimeofday(&start, NULL) == -1)
+		return TNT_ESYSTEM;
+	timeout.tv_sec  = floor(tm);
+	timeout.tv_usec = (tm - floor(tm)) * micro;
+	while (1) {
+		fd_set fd_read, fd_write;
+		if (*event & IO_READ) {
+			FD_ZERO(&fd_read);
+			FD_SET(fd, &fd_read);
+		}
+		if (*event & IO_WRITE) {
+			FD_ZERO(&fd_write);
+			FD_SET(fd, &fd_write);
+		}
+		int ret = select(fd + 1, &fd_read, &fd_write, NULL, &timeout);
+		if (ret == -1) {
+			/* check for errno */
+			if (errno == EINTR || errno == EAGAIN) {
+				struct timeval curr;
+				if (gettimeofday(&curr, NULL) == -1)
+					return TNT_ESYSTEM;
+				passd_usec = (curr.tv_sec - start.tv_sec) * micro +
+					     (curr.tv_usec - start.tv_usec);
+				curr_timeout = passd_usec - timeout_usec;
+				if (curr_timeout <= 0)
+					return TNT_ETMOUT;
+				timeout.tv_sec  = curr_timeout / micro;
+				timeout.tv_usec = curr_timeout % micro;
+				continue;
+			} else {
+				*event = 0;
+				return TNT_ESYSTEM;
+			}
+		} else if (ret == 0) {
+			/* timeout */
+			*event = 0;
+			return TNT_ETMOUT;
+		}
+		*event = 0;
+		*event |= FD_ISSET(fd, &fd_read) ? IO_READ : 0;
+		*event |= FD_ISSET(fd, &fd_write) ? IO_WRITE : 0;
+		break;
+	}
+
+	return TNT_EOK;
+}
+
+enum tnt_error
+gaiwait_cb_default(const char *host, const char *port,
+		   const struct addrinfo *hints,
+		   struct addrinfo **res, double tm)
+{
+	/* Given timeout is ignored */
+	(void )tm;
+	if (getaddrinfo(host, port, hints, res) == -1) {
+		freeaddrinfo(*res);
+		return TNT_ERESOLVE;
+	}
+	return TNT_EOK;
+}
+
 static enum tnt_error
-tnt_io_resolve(struct sockaddr_in *addr,
+tnt_io_resolve(struct tnt_stream_net *s, struct sockaddr_in *addr,
 	       const char *hostname, unsigned short port)
 {
 	memset(addr, 0, sizeof(struct sockaddr_in));
 	addr->sin_family = AF_INET;
 	addr->sin_port = htons(port);
 	struct addrinfo *addr_info = NULL;
-	if (getaddrinfo(hostname, NULL, NULL, &addr_info) == 0) {
-		memcpy(&addr->sin_addr,
-		       (void*)&((struct sockaddr_in *)addr_info->ai_addr)->sin_addr,
-		       sizeof(addr->sin_addr));
-		freeaddrinfo(addr_info);
-		return TNT_EOK;
+	assert(s->gaiwait != NULL);
+	/* Construct helpers */
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_ADDRCONFIG|AI_NUMERICSERV|AI_PASSIVE;
+	hints.ai_protocol = 0;
+	/* Call getaddrinfo */
+	enum tnt_error rv = s->gaiwait(hostname, NULL, &hints, &addr_info,
+				       tv_to_double(&s->opt.tmout_connect));
+	if (rv != TNT_EOK) {
+		return rv;
 	}
-	if (addr_info)
-		freeaddrinfo(addr_info);
-	return TNT_ERESOLVE;
+	assert(addr_info != NULL);
+	memcpy(&addr->sin_addr,
+	       (void*)&((struct sockaddr_in *)addr_info->ai_addr)->sin_addr,
+	       sizeof(addr->sin_addr));
+	freeaddrinfo(addr_info);
+	return TNT_EOK;
 }
 
-static enum tnt_error tnt_io_nonblock(struct tnt_stream_net *s, int set) {
+enum tnt_error tnt_io_nonblock(struct tnt_stream_net *s, int set) {
 	int flags = fcntl(s->fd, F_GETFL);
 	if (flags == -1) {
 		s->errno_ = errno;
@@ -99,82 +198,56 @@ tnt_io_connect_do(struct tnt_stream_net *s, const char *host, int port)
 {
 	/* resolving address */
 	struct sockaddr_in addr;
-	enum tnt_error result = tnt_io_resolve(&addr, host, port);
-	if (result != TNT_EOK)
+	enum tnt_error result = tnt_io_resolve(s, &addr, host, port);
+	if (result != TNT_EOK) {
+		s->errno_ = errno;
 		return result;
+	}
 
 	/* setting nonblock */
 	result = tnt_io_nonblock(s, 1);
 	if (result != TNT_EOK)
 		return result;
 
-	if (connect(s->fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		if (errno == EINPROGRESS) {
-			/** waiting for connection while handling signal events */
-			const int64_t micro = 1000000;
-			int64_t tmout_usec = s->opt.tmout_connect.tv_sec * micro;
-			/* get start connect time */
-			struct timeval start_connect;
-			if (gettimeofday(&start_connect, NULL) == -1) {
-				s->errno_ = errno;
-				return TNT_ESYSTEM;
-			}
-			/* set initial timer */
-			struct timeval tmout;
-			memcpy(&tmout, &s->opt.tmout_connect, sizeof(tmout));
-			while (1) {
-				fd_set fds;
-				FD_ZERO(&fds);
-				FD_SET(s->fd, &fds);
-				int ret = select(s->fd + 1, NULL, &fds, NULL, &tmout);
-				if (ret == -1) {
-					if (errno == EINTR || errno == EAGAIN) {
-						/* get current time */
-						struct timeval curr;
-						if (gettimeofday(&curr, NULL) == -1) {
-							s->errno_ = errno;
-							return TNT_ESYSTEM;
-						}
-						/* calculate timeout last time */
-						int64_t passd_usec = (curr.tv_sec - start_connect.tv_sec) * micro +
-							(curr.tv_usec - start_connect.tv_usec);
-						int64_t curr_tmeout = passd_usec - tmout_usec;
-						if (curr_tmeout <= 0) {
-							/* timeout */
-							return TNT_ETMOUT;
-						}
-						tmout.tv_sec = curr_tmeout / micro;
-						tmout.tv_usec = curr_tmeout % micro;
-					} else {
-						s->errno_ = errno;
-						return TNT_ESYSTEM;
-					}
-				} else if (ret == 0) {
-					/* timeout */
-					return TNT_ETMOUT;
-				} else {
-					/* we have a event on socket */
-					break;
-				}
-			}
-			/* checking error status */
-			int opt = 0;
-			socklen_t len = sizeof(opt);
-			if ((getsockopt(s->fd, SOL_SOCKET, SO_ERROR, &opt, &len) == -1) || opt) {
-				s->errno_ = (opt) ? opt: errno;
-				return TNT_ESYSTEM;
-			}
-		} else {
-			s->errno_ = errno;
-			return TNT_ESYSTEM;
+	int rv = connect(s->fd, (struct sockaddr*)&addr, sizeof(addr));
+	if (rv == -1) {
+		switch (errno) {
+		case EAGAIN:
+		case EINTR:
+		case EINPROGRESS:
+			break;
+		default:
+			result = TNT_ESYSTEM;
+			goto error;
 		}
 	}
+	int events = IO_WRITE;
+	assert(s->iowait != NULL);
+	result = s->iowait(s->fd, &events, tv_to_double(&s->opt.tmout_connect));
 
-	/* setting block */
-	result = tnt_io_nonblock(s, 0);
 	if (result != TNT_EOK)
-		return result;
+		goto error;
+
+	/* checking error status */
+	result = TNT_ESYSTEM;
+	int opt = 0;
+	socklen_t len = sizeof(opt);
+	if ((getsockopt(s->fd, SOL_SOCKET, SO_ERROR, &opt, &len) == -1) || opt) {
+		errno = (opt) ? opt : errno;
+		goto error;
+	}
+	/* we're in blocking mode */
+	if (s->iowait == iowait_cb_default) {
+		/* setting block */
+		result = tnt_io_nonblock(s, 0);
+		if (result != TNT_EOK)
+			return result;
+		return TNT_EOK;
+	}
 	return TNT_EOK;
+error:
+	s->errno_ = errno;
+	return result;
 }
 
 static enum tnt_error tnt_io_xbufmax(struct tnt_stream_net *s, int opt, int min) {
@@ -252,6 +325,56 @@ ssize_t tnt_io_flush(struct tnt_stream_net *s) {
 	return rc;
 }
 
+static ssize_t
+tnt_io_writecb(struct tnt_stream_net *s, const char *buf, size_t size, int all)
+{
+	ssize_t written = 0;
+	enum tnt_error err = TNT_EOK;
+	struct timeval start = {0, 0};
+	double tm = tv_to_double(&s->opt.tmout_send);
+	if (tm == 0) tm = LONG_MAX;
+
+	while (size > 0) {
+		assert(gettimeofday(&start, NULL) != -1);
+		ssize_t rv = write(s->fd, buf, size);
+		err = TNT_ESYSTEM;
+		if (rv == 0) {
+			s->connected = 0;
+			s->error = TNT_ECLOSED;
+			return -1;
+		} else if (rv > 0) {
+			written += rv;
+			goto next;
+		}
+		if (errno == EWOULDBLOCK)
+			errno = EAGAIN;
+		switch (errno) {
+		case EINTR:
+		case EAGAIN: {
+			int events = IO_WRITE;
+			assert(s->iowait != NULL);
+			err = s->iowait(s->fd, &events, tm);
+			if (err == TNT_EOK)
+				break;
+			/* FALLTHROUGH */
+		}
+		default:
+			s->errno_ = errno;
+			s->error  = err;
+			return -1;
+		};
+next:
+		if (rv > 0 && size > 0) {
+			if (!all) return rv;
+			buf  += rv;
+			size -= rv;
+		}
+		/* affects only nonblocking connections */
+		update_timeout(&start, &tm);
+	}
+	return written;
+}
+
 ssize_t
 tnt_io_send_raw(struct tnt_stream_net *s, const char *buf, size_t size, int all)
 {
@@ -261,9 +384,7 @@ tnt_io_send_raw(struct tnt_stream_net *s, const char *buf, size_t size, int all)
 		if (s->sbuf.tx) {
 			r = s->sbuf.tx(s->sbuf.buf, buf + off, size - off);
 		} else {
-			do {
-				r = send(s->fd, buf + off, size - off, 0);
-			} while (r == -1 && (errno == EINTR));
+			r = tnt_io_writecb(s, buf+off, size-off, 0);
 		}
 		if (r <= 0) {
 			s->error = TNT_ESYSTEM;
@@ -275,6 +396,64 @@ tnt_io_send_raw(struct tnt_stream_net *s, const char *buf, size_t size, int all)
 	return off;
 }
 
+static ssize_t
+tnt_io_writevcb(struct tnt_stream_net *s, struct iovec *iov, int count, int all)
+{
+	ssize_t written = 0;
+	enum tnt_error err = TNT_EOK;
+	struct timeval start = {0, 0};
+	double tm = tv_to_double(&s->opt.tmout_send);
+	if (tm == 0) tm = LONG_MAX;
+
+	while (count > 0) {
+		assert(gettimeofday(&start, NULL) != -1);
+		ssize_t rv = writev(s->fd, iov, count);
+		err = TNT_ESYSTEM;
+		if (rv == 0) {
+			s->connected = 0;
+			s->error = TNT_ECLOSED;
+			return -1;
+		} else if (rv > 0) {
+			written += rv;
+			goto next;
+		}
+		if (errno == EWOULDBLOCK)
+			errno = EAGAIN;
+		switch (errno) {
+		case EINTR:
+		case EAGAIN: {
+			int events = IO_WRITE;
+			assert(s->iowait != NULL);
+			err = s->iowait(s->fd, &events, tm);
+			if (err == TNT_EOK)
+				break;
+			/* FALLTHROUGH */
+		}
+		default:
+			s->errno_ = errno;
+			s->error  = err;
+			return -1;
+		};
+next:
+
+		while (count > 0 && rv > 0) {
+			if (!all) return rv;
+			if (iov->iov_len > (size_t )rv) {
+				iov->iov_base += rv;
+				iov->iov_len -= rv;
+				break;
+			} else {
+				rv -= iov->iov_len;
+				iov++;
+				count--;
+			}
+		}
+		/* affects only nonblocking connections */
+		update_timeout(&start, &tm);
+	}
+	return written;
+}
+
 ssize_t
 tnt_io_sendv_raw(struct tnt_stream_net *s, struct iovec *iov, int count, int all)
 {
@@ -284,9 +463,7 @@ tnt_io_sendv_raw(struct tnt_stream_net *s, struct iovec *iov, int count, int all
 		if (s->sbuf.txv) {
 			r = s->sbuf.txv(s->sbuf.buf, iov, MIN(count, IOV_MAX));
 		} else {
-			do {
-				r = writev(s->fd, iov, count);
-			} while (r == -1 && (errno == EINTR));
+			r = tnt_io_writevcb(s, iov, count, all);
 		}
 		if (r <= 0) {
 			s->error = TNT_ESYSTEM;
@@ -369,6 +546,56 @@ tnt_io_sendv(struct tnt_stream_net *s, struct iovec *iov, int count)
 	return size;
 }
 
+static ssize_t
+tnt_io_readcb(struct tnt_stream_net *s, char *buf, size_t size, int all)
+{
+	ssize_t bytes_read = 0;
+	enum tnt_error err = TNT_EOK;
+	struct timeval start = {0, 0};
+	double tm = tv_to_double(&s->opt.tmout_recv);
+	if (tm == 0) tm = LONG_MAX;
+
+	while (size > 0) {
+		assert(gettimeofday(&start, NULL) != -1);
+		ssize_t rv = read(s->fd, buf, size);
+		err = TNT_ESYSTEM;
+		if (rv == 0) {
+			s->connected = 0;
+			s->error = TNT_ECLOSED;
+			return -1;
+		} else if (rv > 0) {
+			bytes_read += rv;
+			goto next;
+		}
+		if (errno == EWOULDBLOCK)
+			errno = EAGAIN;
+		switch (errno) {
+		case EINTR:
+		case EAGAIN: {
+			int events = IO_READ;
+			assert(s->iowait != NULL);
+			err = s->iowait(s->fd, &events, tm);
+			if (err == TNT_EOK)
+				break;
+			/* FALLTHROUGH */
+		}
+		default:
+			s->errno_ = errno;
+			s->error  = err;
+			return -1;
+		};
+next:
+		if (rv > 0 && size > 0) {
+			if (!all) return rv;
+			buf  += rv;
+			size -= rv;
+		}
+		/* affects only nonblocking connections */
+		update_timeout(&start, &tm);
+	}
+	return bytes_read;
+}
+
 ssize_t
 tnt_io_recv_raw(struct tnt_stream_net *s, char *buf, size_t size, int all)
 {
@@ -378,9 +605,7 @@ tnt_io_recv_raw(struct tnt_stream_net *s, char *buf, size_t size, int all)
 		if (s->rbuf.tx) {
 			r = s->rbuf.tx(s->rbuf.buf, buf + off, size - off);
 		} else {
-			do {
-				r = recv(s->fd, buf + off, size - off, 0);
-			} while (r == -1 && (errno == EINTR));
+			r = tnt_io_readcb(s, buf + off, size - off, 0);
 		}
 		if (r <= 0) {
 			s->error = TNT_ESYSTEM;

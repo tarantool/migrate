@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include <tarantool/lua.h>
 #include <tarantool/lauxlib.h>
@@ -13,7 +17,14 @@
 #include <tarantool/module.h>
 
 #include <small/ibuf.h>
+
 #include <tarantool/tnt.h>
+
+#include <tarantool/tnt_opt.h>
+#include <tarantool/tnt_net.h>
+#include <tarantool/tnt_log.h>
+#include <tarantool/tnt_rpl.h>
+
 #include <tarantool/tnt_xlog.h>
 #include <tarantool/tnt_snapshot.h>
 
@@ -53,6 +64,7 @@ static void
 lual_pushkey(struct lua_State *L, struct tnt_tuple *t,
 	     struct space_def *def, int ret)
 {
+	(void )ret;
 //	if (ret == F_RET_TUPLE)
 //		return luatu_key_fields(L, t, def);
 	return luata_key_fields(L, t, def);
@@ -62,6 +74,7 @@ static void
 lual_pushops(struct lua_State *L, struct tnt_request_update *req,
 	     struct space_def *def, int ret)
 {
+	(void )ret;
 //	if (ret == F_RET_TUPLE)
 //		return luatu_ops_fields(L, req, def);
 	return luata_ops_fields(L, req, def);
@@ -226,7 +239,7 @@ lua_snap_pairs(struct lua_State *L)
 		struct tnt_log_row *row =
 			&(TNT_SSNAPSHOT_CAST(TNT_ISTORAGE_STREAM(pi))->log.current);
 		uint32_t space = row->row_snap.space;
-		if (!def || space != def->space_no)
+		if (!def || (int )space != def->space_no)
 			def = search_space(hlp, space);
 		if (!def && hlp->spaces) {
 			lua_pop(L, 2);
@@ -254,10 +267,91 @@ lua_snap_pairs(struct lua_State *L)
 	return 2;
 }
 
+
+enum tnt_error
+iowait_cb(int fd, int *event, double tm) {
+	assert((*event & ~(IO_READ | IO_WRITE)) == 0);
+	int ev = 0;
+	ev |= (*event & IO_READ ? COIO_READ : 0);
+	ev |= (*event & IO_WRITE ? COIO_WRITE : 0);
+	ev = coio_wait(fd, ev, tm);
+	if (ev == 0)
+		return TNT_ETMOUT;
+	*event = 0;
+	*event |= (ev & IO_READ ? COIO_READ : 0);
+	*event |= (ev & IO_WRITE ? COIO_WRITE : 0);
+	return TNT_EOK;
+}
+
+enum tnt_error
+gaiwait_cb(const char *host, const char *port,
+	   const struct addrinfo *hints,
+	   struct addrinfo **res, double tm)
+{
+	int rv = coio_getaddrinfo(host, port, hints, res, tm);
+	if (rv != 0) {
+		freeaddrinfo(*res);
+		*res = NULL;
+		return TNT_ERESOLVE;
+	}
+	return TNT_EOK;
+}
+
+static char *opname(uint32_t type) {
+	switch (type) {
+	case TNT_OP_PING:   return "Ping";
+	case TNT_OP_INSERT: return "Insert";
+	case TNT_OP_DELETE: return "Delete";
+	case TNT_OP_UPDATE: return "Update";
+	case TNT_OP_SELECT: return "Select";
+	case TNT_OP_CALL:   return "Call";
+	}
+	return "Unknown";
+}
+
+static int
+lua_rpl_prepair(struct lua_State *L)
+{
+	if (lua_gettop(L) != 3)
+		luaL_error(L, "Usage: rpl_prepare(host, port, lsn)");
+	const char *host = luaL_checkstring(L, 1);
+	int port = luaL_checkinteger(L, 2);
+	long lsn = luaL_checklong(L, 3);
+	/* Prepare network stream */
+	struct tnt_stream *net = NULL;
+	net = tnt_net(NULL);
+	tnt_set(net, TNT_OPT_HOSTNAME, host);
+	tnt_set(net, TNT_OPT_PORT, port);
+	tnt_set(net, TNT_OPT_IOWAIT_CB, iowait_cb);
+	tnt_set(net, TNT_OPT_GAIWAIT_CB, gaiwait_cb);
+	/* Prepare replication stream */
+	struct tnt_stream *rpl = NULL;
+	rpl = tnt_rpl(NULL);
+	tnt_rpl_attach(rpl, net);
+	tnt_rpl_open(rpl, lsn);
+	if (tnt_error(net) != TNT_EOK)
+		luaL_error(L, "tnt_rpl_open failed: %s", tnt_strerror(net));
+	/* do something */
+	struct tnt_iter iter; tnt_iter_request(&iter, rpl);
+	while(tnt_next(&iter)) {
+		struct tnt_stream_rpl *sr = TNT_RPL_CAST(rpl);
+		say_info("%s lsn: %"PRIu64", time: %f, len: %d\n",
+			 opname(sr->row.op), sr->hdr.lsn, sr->hdr.tm,
+			 sr->hdr.len);
+	}
+	if (iter.status == TNT_ITER_FAIL)
+		luaL_error(L, "parsing failed: %s", tnt_strerror(net));
+	/* close replication and network stream */
+	tnt_rpl_close(rpl);
+	tnt_close(net);
+	return 0;
+}
+
 static const struct luaL_reg
 parser_lib_func [] = {
 	{ "snap_pairs",		lua_snap_pairs		 },
 	{ "xlog_pairs",		lua_xlog_pairs		 },
+	{ "rpl_prepare",	lua_rpl_prepair		 },
 	{ NULL,			NULL			 }
 };
 

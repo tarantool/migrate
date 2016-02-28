@@ -43,8 +43,26 @@ extern "C" {
 #include <tarantool/tnt_opt.h>
 #include <tarantool/tnt_iob.h>
 
+/* NIY: returns ESYSTEM/ETIMEDOUT/ERESOLVE/EOK */
+typedef enum tnt_error
+(*gaiwait_cb_t)(const char *hostname, const char *servname,
+		const struct addrinfo *hints, struct addrinfo **res,
+		double tm);
+
+/* returns ESYSTEM/ETIMEDOUT/EOK */
+typedef enum tnt_error
+(*iowait_cb_t)(int fd, int *event, double tm);
+
+#ifndef   IO_READ
+#define   IO_READ 0x01
+#endif /* IO_READ */
+
+#ifndef   IO_WRITE
+#define   IO_WRITE 0x02
+#endif /* IO_WRITE */
+
 enum tnt_error {
-	TNT_EOK,
+	TNT_EOK = 0,
 	TNT_EFAIL,
 	TNT_EMEMORY,
 	TNT_ESYSTEM,
@@ -53,7 +71,13 @@ enum tnt_error {
 	TNT_ERESOLVE,
 	TNT_ETMOUT,
 	TNT_EBADVAL,
+	TNT_ECLOSED,
 	TNT_LAST
+};
+
+struct tnt_error_desc {
+	enum tnt_error type;
+	char *desc;
 };
 
 struct tnt_stream_net {
@@ -64,6 +88,11 @@ struct tnt_stream_net {
 	struct tnt_iob rbuf;
 	enum tnt_error error;
 	int errno_;
+	/* non-blocking helpers*/
+	struct {
+		iowait_cb_t  iowait;
+		gaiwait_cb_t gaiwait;
+	};
 };
 
 #define TNT_SNET_CAST(S) ((struct tnt_stream_net*)(S)->data)

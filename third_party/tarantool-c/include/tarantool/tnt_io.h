@@ -30,17 +30,35 @@
  * SUCH DAMAGE.
  */
 
-enum tnt_error tnt_io_connect(struct tnt_stream_net *s, const char *host, int port);
+enum tnt_error
+tnt_io_connect(struct tnt_stream_net *s, const char *host, int port);
+
 void tnt_io_close(struct tnt_stream_net *s);
 
 ssize_t tnt_io_flush(struct tnt_stream_net *s);
 
-ssize_t tnt_io_send_raw(struct tnt_stream_net *s, const char *buf, size_t size, int all);
-ssize_t tnt_io_sendv_raw(struct tnt_stream_net *s, struct iovec *iov, int count, int all);
-ssize_t tnt_io_recv_raw(struct tnt_stream_net *s, char *buf, size_t size, int all);
+ssize_t tnt_io_send_raw(struct tnt_stream_net *s, const char *buf,
+			size_t size, int all);
+ssize_t tnt_io_sendv_raw(struct tnt_stream_net *s, struct iovec *iov,
+			 int count, int all);
+ssize_t tnt_io_recv_raw(struct tnt_stream_net *s, char *buf,
+			size_t size, int all);
 
-ssize_t tnt_io_send(struct tnt_stream_net *s, const char *buf, size_t size);
-ssize_t tnt_io_sendv(struct tnt_stream_net *s, struct iovec *iov, int count);
-ssize_t tnt_io_recv(struct tnt_stream_net *s, char *buf, size_t size);
+ssize_t tnt_io_send  (struct tnt_stream_net *s, const char *buf, size_t size);
+ssize_t tnt_io_sendv (struct tnt_stream_net *s, struct iovec *iov, int count);
+ssize_t tnt_io_recv  (struct tnt_stream_net *s, char *buf, size_t size);
+
+enum tnt_error iowait_cb_default(int fd, int *event, double tm);
+
+enum tnt_error
+gaiwait_cb_default(const char *host, const char *port,
+		   const struct addrinfo *hints,
+		   struct addrinfo **res, double tm);
+
+enum tnt_error tnt_io_nonblock(struct tnt_stream_net *s, int set);
+
+typedef enum tnt_error
+(* tnt_io_resolve_t)(struct sockaddr_in *addr, const char *hostname, int port);
+
 
 #endif /* TNT_IO_H_INCLUDED */

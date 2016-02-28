@@ -33,9 +33,11 @@
 typedef void *(tnt_allocator_t)(void *ptr, size_t size);
 
 void *tnt_mem_init(tnt_allocator_t alloc);
-void *tnt_mem_alloc(size_t size);
-void *tnt_mem_realloc(void *ptr, size_t size);
-char *tnt_mem_dup(char *sz);
+
+void *tnt_mem_alloc(size_t size) __attribute__((malloc));
+char *tnt_mem_dup(char *sz) __attribute__((malloc));
 void tnt_mem_free(void *ptr);
+
+void *tnt_mem_realloc(void *ptr, size_t size);
 
 #endif /* TNT_MEM_H_INCLUDED */

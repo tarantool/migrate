@@ -28,10 +28,23 @@
  * SUCH DAMAGE.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+
+#include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
 
 #include <tarantool/tnt.h>
 #include <tarantool/tnt_net.h>
@@ -103,8 +116,8 @@ tnt_net_request(struct tnt_stream *s, struct tnt_request *r) {
  * create and initialize network stream;
  *
  * s - stream pointer, maybe NULL
- * 
- * if stream pointer is NULL, then new stream will be created. 
+ *
+ * if stream pointer is NULL, then new stream will be created.
  *
  * returns stream pointer, or NULL on error.
 */
@@ -145,7 +158,7 @@ struct tnt_stream *tnt_net(struct tnt_stream *s) {
  * s   - network stream pointer
  * opt - option id
  * ... - option value
- * 
+ *
  * returns 0 on success, or -1 on error.
 */
 int tnt_set(struct tnt_stream *s, int opt, ...) {
@@ -163,7 +176,7 @@ int tnt_set(struct tnt_stream *s, int opt, ...) {
  * initialize prepared network stream;
  *
  * s - network stream pointer
- * 
+ *
  * returns 0 on success, or -1 on error.
 */
 int tnt_init(struct tnt_stream *s) {
@@ -173,7 +186,7 @@ int tnt_init(struct tnt_stream *s) {
 		sn->error = TNT_EMEMORY;
 		return -1;
 	}
-	if (tnt_iob_init(&sn->rbuf, sn->opt.recv_buf, sn->opt.recv_cb, NULL, 
+	if (tnt_iob_init(&sn->rbuf, sn->opt.recv_buf, sn->opt.recv_cb, NULL,
 		sn->opt.recv_cb_arg) == -1) {
 		sn->error = TNT_EMEMORY;
 		return -1;
@@ -186,6 +199,16 @@ int tnt_init(struct tnt_stream *s) {
 		sn->error = TNT_EBADVAL;
 		return -1;
 	}
+	if (sn->opt.iowait_cb != NULL) {
+		sn->iowait = sn->opt.iowait_cb;
+	} else {
+		sn->iowait = iowait_cb_default;
+	}
+	if (sn->opt.gaiwait_cb != NULL) {
+		sn->gaiwait = sn->opt.gaiwait_cb;
+	} else {
+		sn->gaiwait = gaiwait_cb_default;
+	}
 	return 0;
 }
 
@@ -196,7 +219,7 @@ int tnt_init(struct tnt_stream *s) {
  * reconnect to server;
  *
  * s - network stream pointer
- * 
+ *
  * returns 0 on success, or -1 on error.
 */
 int tnt_connect(struct tnt_stream *s) {
@@ -215,7 +238,7 @@ int tnt_connect(struct tnt_stream *s) {
  * close connection to server;
  *
  * s - network stream pointer
- * 
+ *
  * returns 0 on success, or -1 on error.
 */
 void tnt_close(struct tnt_stream *s) {
@@ -229,7 +252,7 @@ void tnt_close(struct tnt_stream *s) {
  * send bufferized data to server;
  *
  * s - network stream pointer
- * 
+ *
  * returns size of data been sended on success, or -1 on error.
 */
 ssize_t tnt_flush(struct tnt_stream *s) {
@@ -263,12 +286,7 @@ enum tnt_error tnt_error(struct tnt_stream *s) {
 
 /* must be in sync with enum tnt_error */
 
-struct tnt_error_desc {
-	enum tnt_error type;
-	char *desc;
-};
-
-static struct tnt_error_desc tnt_error_list[] = 
+struct tnt_error_desc tnt_error_list[] =
 {
 	{ TNT_EOK,      "ok"                       },
 	{ TNT_EFAIL,    "fail"                     },
@@ -279,6 +297,7 @@ static struct tnt_error_desc tnt_error_list[] =
 	{ TNT_ERESOLVE, "gethostbyname(2) failed"  },
 	{ TNT_ETMOUT,   "operation timeout"        },
 	{ TNT_EBADVAL,  "bad argument"             },
+	{ TNT_ECLOSED,  "connection is closed"     },
 	{ TNT_LAST,      NULL                      }
 };
 

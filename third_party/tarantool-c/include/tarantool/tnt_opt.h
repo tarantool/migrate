@@ -31,7 +31,7 @@
  */
 
 enum tnt_opt_type {
-	TNT_OPT_HOSTNAME,
+	TNT_OPT_HOSTNAME = 0,
 	TNT_OPT_PORT,
 	TNT_OPT_TMOUT_CONNECT,
 	TNT_OPT_TMOUT_RECV,
@@ -42,7 +42,10 @@ enum tnt_opt_type {
 	TNT_OPT_SEND_BUF,
 	TNT_OPT_RECV_CB,
 	TNT_OPT_RECV_CB_ARG,
-	TNT_OPT_RECV_BUF
+	TNT_OPT_RECV_BUF,
+	TNT_OPT_IOWAIT_CB,
+	TNT_OPT_GAIWAIT_CB,
+	TNT_OPT_URI
 };
 
 struct tnt_opt {
@@ -58,6 +61,8 @@ struct tnt_opt {
 	void *recv_cb;
 	void *recv_cb_arg;
 	int recv_buf;
+	void *iowait_cb;
+	void *gaiwait_cb;
 };
 
 void tnt_opt_init(struct tnt_opt *opt);

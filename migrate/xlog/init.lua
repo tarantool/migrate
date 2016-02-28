@@ -292,7 +292,6 @@ local function reader_open(name, cfg)
         end
         local helper = parse_cfg(cfg, ext, iter)
         ffi.gc(iter, ffi.C.tnt_iter_free)
-        -- return internal.snap_pairs, {log, helper}, 0
         return fun.wrap(internal.snap_pairs, {log, helper}, 0)
     elseif log_type == ffi.C.TNT_LOG_XLOG then
         local log = ffi.C.tnt_xlog(nil)
@@ -316,5 +315,6 @@ local function reader_open(name, cfg)
 end
 
 return {
-    open = reader_open
+    open = reader_open,
+    rpl_prepare = internal.rpl_prepare
 }

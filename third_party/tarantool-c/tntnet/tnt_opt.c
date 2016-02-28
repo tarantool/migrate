@@ -28,13 +28,23 @@
  * SUCH DAMAGE.
  */
 
+#include <assert.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
-#include <sys/types.h>
 #include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
 
 #include <tarantool/tnt.h>
 #include <tarantool/tnt_net.h>
@@ -53,8 +63,7 @@ tnt_opt_init(struct tnt_opt *opt)
 void
 tnt_opt_free(struct tnt_opt *opt)
 {
-	if (opt->hostname)
-		tnt_mem_free(opt->hostname);
+	if (opt->hostname) tnt_mem_free(opt->hostname);
 }
 
 int
@@ -104,6 +113,12 @@ tnt_opt_set(struct tnt_opt *opt, enum tnt_opt_type name, va_list args)
 		break;
 	case TNT_OPT_RECV_BUF:
 		opt->recv_buf = va_arg(args, int);
+		break;
+	case TNT_OPT_IOWAIT_CB:
+		opt->iowait_cb = va_arg(args, void*);
+		break;
+	case TNT_OPT_GAIWAIT_CB:
+		opt->gaiwait_cb = va_arg(args, void*);
 		break;
 	default:
 		return TNT_EFAIL;

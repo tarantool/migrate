@@ -13,6 +13,7 @@ set (xlog_sources
 add_library(xlog SHARED ${xlog_sources})
 set_target_properties(xlog PROPERTIES PREFIX "" OUTPUT_NAME "internal")
 target_link_libraries(xlog tntrpl)
+target_link_libraries(xlog tntnet)
 target_link_libraries(xlog tnt)
 target_link_libraries(xlog small)
 

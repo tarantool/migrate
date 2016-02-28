@@ -28,14 +28,23 @@
  * SUCH DAMAGE.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 
+#include <sys/time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
 
 #include <tarantool/tnt.h>
 #include <tarantool/tnt_net.h>
@@ -137,7 +146,7 @@ error:
  * lsn - start lsn 
  *
  * network stream must be properly initialized before
- * this function called (see ttnt_rpl_net, tnt_set).
+ * this function called (see tnt_rpl_net, tnt_set).
  * 
  * returns 0 on success, or -1 on error.
 */
