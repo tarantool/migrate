@@ -1,14 +1,13 @@
 #include "tuple.h"
 
-#include <module.h>
-
 #include <assert.h>
 #include <stdint.h>
 #include <inttypes.h>
 
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+#include <tarantool/module.h>
+#include <tarantool/lua.h>
+#include <tarantool/lauxlib.h>
+#include <tarantool/lualib.h>
 
 #include <small/ibuf.h>
 

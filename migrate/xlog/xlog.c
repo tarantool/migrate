@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+#include <tarantool/lua.h>
+#include <tarantool/lauxlib.h>
+#include <tarantool/lualib.h>
 
 #include "xlog.h"
 

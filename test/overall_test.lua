@@ -36,8 +36,8 @@ local val = migrate.reader({
                 new_id = i_0.name,
                 parts = {1}
             },
-            fields = {'str', 'num', 'num'},
-            default = 'str',
+            fields = {'str'},
+            default = 'num',
         },
         [2] = {
             new_id = s_2.name,
@@ -53,6 +53,9 @@ local val = migrate.reader({
 
 val:resume(val)
 val:resume(val)
+
+print("space0_len: ", s_0:len(), tostring(s_0:select({}, {limit=1})[1]))
+print("space2_len: ", s_2:len())
 
 -- require('console').start()
 os.exit(0)

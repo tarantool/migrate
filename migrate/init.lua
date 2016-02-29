@@ -78,7 +78,7 @@ local function convert_cfg(cfg)
     end
 
     return {
-        defautls = cfg.default,
+        default = cfg.default,
         schema = cfg.fields,
         ischema = iter(cfg.index.parts):map(get_type):totable(),
 
