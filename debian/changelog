@@ -1,0 +1,5 @@
+tarantool-migrate (0.0.1-1) unstable; urgency=low
+
+  * Initial release
+
+ -- Eugene Blikh <bigbes@tarantool.org>  Mon, 29 Feb 2016 11:30:00 +0300

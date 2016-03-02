@@ -1,0 +1,5 @@
+tarantool-migrate/
+files
+stamp-*
+*.substvars
+*.log
