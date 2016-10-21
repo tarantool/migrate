@@ -61,16 +61,16 @@ local xdir_xdir_yaml = {
 [3] = yaml.decode[[
 ---
 - 25
-- - mock/test-3/0000000000000000024.xlog
-  - mock/test-3/0000000000000000025.snap
+- - mock/test-3/0000000000000000025.snap
+  - mock/test-3/0000000000000000024.xlog
   - mock/test-3/0000000000000000075.xlog
 ...
 ]],
 [4] = yaml.decode[[
 ---
 - 110
-- - mock/test-4/0000000000000000100.xlog
-  - mock/test-4/0000000000000000110.snap
+- - mock/test-4/0000000000000000110.snap
+  - mock/test-4/0000000000000000100.xlog
 ...
 ]],
 [5] = yaml.decode[[
@@ -185,7 +185,8 @@ test:test("xdir_xdir", function(test)
     fun.iter(xdir_xdir_yaml):enumerate():each(
         function(k, v)
             local path = 'mock/test-' .. tostring(k)
-            test:is_deeply({xdir.xdir(path, path)}, v, "check " .. path)
+            local result = {xdir.xdir(path, path)}
+            test:is_deeply(result, v, "check " .. path)
         end
     )
 end)
