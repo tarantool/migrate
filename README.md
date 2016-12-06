@@ -2,7 +2,7 @@
   <img src="https://avatars2.githubusercontent.com/u/2344919?v=2&s=250" align="right">
 </a>
 
-# migrate - a [Tarantool][] rock for a migration from Tarantool 1.5 to 1.6
+# migrate - a [Tarantool][] rock for a migration from Tarantool 1.5 to 1.6, 1.7, 1.8
 
 ## Getting Started
 
