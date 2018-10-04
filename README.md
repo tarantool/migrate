@@ -2,17 +2,17 @@
   <img src="https://avatars2.githubusercontent.com/u/2344919?v=2&s=250" align="right">
 </a>
 
-# migrate - a [Tarantool][] rock for a migration from Tarantool 1.5 to 1.6, 1.7, 1.8
+# migrate - a [Tarantool][] rock for migration from Tarantool 1.5 to 1.6, 1.7, 1.8
 
 ## Getting Started
 
 ### Prerequisites
 
-Tarantool 1.6.5+ with heder files
+Tarantool 1.6.5+ with header files:
 
 	* tarantool && tarantool-dev packages on Ubuntu/Debian
 	* tarantool && tarantool-devel package on Fedora/Centos
-	* tarantool package on Mac OS X if you're using Homebrew
+	* tarantool package on Mac OS X if you are using Homebrew
 
 If building with LuaRocks:
 
@@ -21,10 +21,10 @@ If building with LuaRocks:
 
 ### Installation
 
-Clone repository and the build it using CMake:
+Clone the repository and build it using CMake:
 
 ``` bash
-git clone https://github.com/bigbes/migrate.git
+git clone https://github.com/tarantool/migrate.git
 cd http && cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo
 make
 make install
@@ -33,14 +33,14 @@ make install
 You can also use LuaRocks:
 
 ``` bash
-luarocks install https://raw.githubusercontent.com/bigbes/migrate/master/migrate-scm-1.rockspec
+luarocks install https://raw.githubusercontent.com/tarantool/migrate/master/migrate-scm-1.rockspec
 ```
 
-See [tarantool/rocks][TarantoolRocks] for LuaRocks configuration details.
+See [TarantoolRocks][] for LuaRocks configuration details.
 
 ### Tests
 
-Run tests using ctest:
+Run tests using `ctest`:
 
 ```
 $ ctest
@@ -97,7 +97,7 @@ Total Test time (real) =   0.15 sec
 	-- Load all available tuples/rows from snapshots/xlogs
 	toolkit:resume()
 
-	-- Do something to make service to know, that he works with new Tarantool
+	-- Do something to let the service know it works with the new Tarantool
 	-- ...
 
 	-- Load the rest of rows from xlogs
@@ -116,51 +116,50 @@ local migrate = require('migrate')
 
 ### \<table\> reader_object = migrate.reader(*cfg*)
 
-Create migration object. This function returns new migration object
+Create a migration object. This function returns the new migration object.
 
-Configuration is a table object consists of:
+Configuration is a table object that consists of:
 
 * `dir = {xlog = 'xlog_dir', snap = 'snap_dir'}` or `dir = 'xlog_snap_dir'`.
-	This field is required.
-* `spaces` - table with space defintion, described later.
-	This field is required.
-* `throw` - boolean value to indicate ignore converting errors or not.
-	It can happen, if you said that field must be number, but it's size is not or
-	4 nor 8 OR if you can't insert/delete/update. Error messages are logged.
+	Required field.
+* `spaces` - table with space definition, described later.
+	Required field.
+* `throw` - boolean value that indicates whether to ignore error conversion or not.
+	Errors happen if you cannot insert/delete/update or if you said that some 
+	field must be a number but its size is not 4 nor 8. Error messages are logged.
 	`true` by default.
 * `commit` - use `box.begin()`/`box.commit()` before and after batch processing.
 	`true` by default.
-* `batch_count` - count of tuples/rows to read from disk, parse and process at a
+* `batch_count` - count of tuples/rows to read from disk, parse, and process at a
 	time. `500` by default.
-* `return_type` - type of objects to convert tuples to. May be one of `'table'`/`'tuple'`.
-	`'tuple'` is the default value. Use `'table'` if you want to modify tuples and
-	then push it into Tarantool (this way is slower).
+* `return_type` - type of objects to convert tuples to. Can be `'table'` or 
+    `'tuple'` (default). Use `'table'` if you want to modify tuples and
+	then push them into Tarantool (this way is slower).
 
 `spaces` is a table that associates old space number and table with definitions:
 
-* `new_id` - string or number with space `name`/`number`
-* `index` - index definition table
-	* `new_id` - new primary index name/number (`string` or `number`)
-	* `parts` - table of positions of keys in primary index
-* `fields` - table of key types ({'str'/'num', ..})
-* `default` - default type of field (if it's not defined in fields) ('str'/'num')
-* `insert` - custom insert function. `function(tuple, flags)`. If not defined,
-	then function that inserts `tuple` into space `new_id`.
-* `delete` - custom delete function. `function(key, flags)`. If not defined,
-	then function thar deletes tuple with key `key` from space `new_id`
-* `update` - custom update function. `function(key, ops, flags`. If not defined,
-	then functiin that executes `update` in space `new_id` with operations `ops`
-	on tuple with PK `key`.
+* `new_id` - string or number with space `name`/`number`.
+* `index` - index definition table that includes:
+	* `new_id` - new primary index name/number (`string` or `number`),
+	* `parts` - table of key positions in primary index.
+* `fields` - table of key types (`{'str'/'num', ..}`).
+* `default` - default field type (`'str'`/`'num'`) if it is not defined in fields.
+* `insert` - custom insert function `function(tuple, flags)`. If not defined, 
+	a function that inserts a `tuple` into a space with `new_id`.
+* `delete` - custom delete function `function(key, flags)`. If not defined, 
+	a function that deletes a tuple with a `key` from a space with `new_id`.
+* `update` - custom update function `function(key, ops, flags`. If not defined,
+	a function that executes `update` with operations `ops` in a space with `new_id` 
+	on a tuple with PK `key`.
 
 ### \<number\> processed = reader_object:resume()
 
-Resume loading of xlogs/snapshots. It uses similar mechanism as Tarantool 1.5 to
-find all snapshot and xlogs necessary to load (last snapshot and all xlogs, that
-contain rows with LSN > lsn of snapshot)
+Resume loading of xlogs/snapshots. It uses a mechanism similar to that of Tarantool 
+1.5 to find all snapshots and xlogs necessary to load:
 
-* When you run this method first time - it loads snap + xlogs.
-* When you run this method next times - it loads only xlogs with LSN > last
-	processed lsn.
+* When you run this method for the first time - it loads the last snapshot and xlogs.
+* When you run this method next time and subsequently - it loads only the xlogs that
+    contain rows with LSN greater than the last processed.
 
 ## API for xlog/snapshot reader
 
@@ -206,4 +205,5 @@ TODO: Document this
 
 [Tarantool]: http://github.com/tarantool/tarantool
 [Documentation]: http://tarantool.org/doc/
-[Tests]: https://github.com/bigbes/migrate/tree/master/test
+[Tests]: https://github.com/tarantool/migrate/tree/master/test
+[TarantoolRocks]: https://github.com/tarantool/rocks
