@@ -36,7 +36,7 @@ You can also use LuaRocks:
 luarocks install https://raw.githubusercontent.com/tarantool/migrate/master/migrate-scm-1.rockspec
 ```
 
-See [TarantoolRocks](https://www.tarantool.io/en/doc/1.9/reference/reference_rock/) for LuaRocks configuration details.
+See [TarantoolRocks][] for LuaRocks configuration details.
 
 ### Tests
 
@@ -206,3 +206,4 @@ TODO: Document this
 [Tarantool]: http://github.com/tarantool/tarantool
 [Documentation]: http://tarantool.org/doc/
 [Tests]: https://github.com/tarantool/migrate/tree/master/test
+[TarantoolRocks]: https://www.tarantool.io/en/doc/1.9/reference/reference_rock/
