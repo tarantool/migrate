@@ -206,4 +206,4 @@ TODO: Document this
 [Tarantool]: http://github.com/tarantool/tarantool
 [Documentation]: http://tarantool.org/doc/
 [Tests]: https://github.com/tarantool/migrate/tree/master/test
-[TarantoolRocks]: https://www.tarantool.io/en/doc/1.9/reference/reference_rock/
+[TarantoolRocks]: https://github.com/tarantool/rocks
