@@ -159,7 +159,7 @@ Resume loading of xlogs/snapshots. It uses a mechanism similar to that of Tarant
 
 * When you run this method for the first time - it loads the last snapshot and xlogs.
 * When you run this method next time and subsequently - it loads only the xlogs that
-    contain rows with LSN greater than the last processed (the snapshot's one).
+    contain rows with LSN greater than the last processed.
 
 ## API for xlog/snapshot reader
 
