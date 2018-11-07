@@ -161,42 +161,6 @@ Resume loading of xlogs/snapshots. It uses a mechanism similar to that of Tarant
 * When you run this method next time and subsequently - it loads only the xlogs that
     contain rows with LSN greater than the last processed.
 
-## API for xlog/snapshot reader
-
-``` lua
-local xlog = require('migrate.xlog')
-```
-
-### \<iterator\> it = xlog.open(*cfg*)
-
-TODO: Document this
-
-## API for xdir
-
-``` lua
-local xdir = require('xdir')
-```
-
-### \<number\> lsn, \<table\> files = xdir.xdir(*snap_path*[, *xlog_path*])
-
-TODO: Document this
-
-### \<table\> files = xdir.xdir_load(*ext*)
-
-TODO: Document this
-
-### \<table\> files = xdir.xdir_xlogs_after_lsn(*lsn*)
-
-TODO: Document this
-
-### \<string\> filename = xdir.filename_from_lsn(*lsn*[, *extension*])
-
-TODO: Document this
-
-### \<number\> lsn = xdir.filename_from_lsn(*filename*)
-
-TODO: Document this
-
 ## See Also
 
 * [Tarantool][]
