@@ -21,11 +21,11 @@ If building with LuaRocks:
 
 ### Installation
 
-Clone the repository and build it using CMake:
+Clone the repository with submodules and build it using CMake:
 
 ``` bash
-git clone https://github.com/tarantool/migrate.git
-cd http && cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+git clone --recursive https://github.com/tarantool/migrate.git
+cd migrate && cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo
 make
 make install
 ```
