@@ -17,7 +17,7 @@ local UINT64_MAX = 18446744073709551615ULL
 
 -- ffi.load(package.searchpath('migrate.xlog.libtarantool', package.cpath), true)
 -- ffi.load(package.searchpath('migrate.xlog.libtarantoolrpl', package.cpath), true)
-ffi.load(package.searchpath('migrate.xlog.internal', package.cpath), true)
+ffi.load(package.search('migrate.xlog.internal'), true)
 
 local function man_gc(object)
     log.debug("GC'ed %s", tostring(object))

@@ -2,13 +2,13 @@
   <img src="https://avatars2.githubusercontent.com/u/2344919?v=2&s=250" align="right">
 </a>
 
-# migrate - a [Tarantool][] rock for migration from Tarantool 1.5 to 1.6, 1.7, 1.8
+# migrate - a [Tarantool][] rock for migration from Tarantool 1.5 to 1.10+
 
 ## Getting Started
 
 ### Prerequisites
 
-Tarantool 1.6.5+ with header files:
+Tarantool 1.10.0+ with header files:
 
 	* tarantool && tarantool-dev packages on Ubuntu/Debian
 	* tarantool && tarantool-devel package on Fedora/Centos

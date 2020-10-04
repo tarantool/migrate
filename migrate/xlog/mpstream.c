@@ -276,7 +276,7 @@ mmpstream_encode_ext(struct mpstream *stream, const char *ext, uint32_t len,
 	assert(mp_sizeof_ext(len) < 5 + 1 + len);
 	char *data = mmpstream_reserve(stream, 1);
 	if (data) {
-		char *pos = mp_encode_ext(data, ext, len, type);
+		char *pos = mp_encode_ext(data, type, ext, len);
 		mmpstream_advance(stream, pos - data);
 	}
 	return data;
@@ -331,12 +331,12 @@ mmpstream_next(struct mmpstream_iter *iter)
 		out->fval = mp_decode_double(&pos);
 		break;
 	case MP_STR:
-		if (mp_check_str(pos, iter->stream->pos) > 0)
+		if (mp_check_strl(pos, iter->stream->pos) > 0)
 			return NULL;
 		out->sval.val = mp_decode_str(&pos, &out->sval.size);
 		break;
 	case MP_BIN:
-		if (mp_check_bin(pos, iter->stream->pos) > 0)
+		if (mp_check_binl(pos, iter->stream->pos) > 0)
 			return NULL;
 		out->sval.val = mp_decode_bin(&pos, &out->sval.size);
 		break;
@@ -360,10 +360,10 @@ mmpstream_next(struct mmpstream_iter *iter)
 		out->size = mp_decode_map(&pos);
 		break;
 	case MP_EXT:
-		if (mp_check_ext(pos, iter->stream->pos) > 0)
+		if (mp_check_extl(pos, iter->stream->pos) > 0)
 			return NULL;
-		out->eval.val = mp_decode_ext(&pos, &out->eval.size,
-					      &out->eval.type);
+		out->eval.val = mp_decode_ext(&pos,&out->eval.type,
+					      &out->eval.size);
 		break;
 	}
 	iter->pos = pos;

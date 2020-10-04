@@ -1,12 +1,12 @@
 package = 'migrate'
 version = 'scm-1'
 source  = {
-    url    = 'git://github.com/bigbes/xlog.git',
+    url    = 'git://github.com/tarantool/migrate.git',
     branch = 'master',
 }
 description = {
-    summary  = "Tarantool module for Migrating from 1.5 version to 1.6",
-    homepage = 'https://github.com/bigbes/xlog/',
+    summary  = "Tarantool module for Migrating from 1.5 version to 1.10+",
+    homepage = 'https://github.com/tarantool/migrate/',
     license  = 'BSD',
 }
 dependencies = {
@@ -20,7 +20,7 @@ external_dependencies = {
         header = "small/ibuf.h"
     },
     MSGPUCK = {
-        header = "msgpuck/msgpuck.h"
+        header = "msgpuck.h"
     }
 }
 
@@ -62,7 +62,8 @@ build = {
                 "./"
             },
             libraries = {
-                'small'
+                'small',
+                'msgpuck'
             }
         },
         ['migrate.xlog'] = 'migrate/xlog/init.lua',

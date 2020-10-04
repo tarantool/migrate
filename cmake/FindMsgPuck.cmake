@@ -1,4 +1,4 @@
-# - Find libmsgpuck header-only library
+# - Find libmsgpuck library
 # The module defines the following variables:
 #
 #  MSGPUCK_FOUND - true if MsgPuck was found

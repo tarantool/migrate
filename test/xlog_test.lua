@@ -488,7 +488,7 @@ local function verify_insert_op(test, log, spacedef, row, rtype, convert)
 end
 
 function xlog_test(test, curlog, spacedefs, bcount, ctype, rtype, cut)
-    cur = cur or false
+    cut = cut or false
     local def = {}
 
     local lsn_from = curlog.lsn[1]

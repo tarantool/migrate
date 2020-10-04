@@ -254,7 +254,7 @@ lua_snap_pairs(struct lua_State *L)
 	return 2;
 }
 
-static const struct luaL_reg
+static const struct luaL_Reg
 parser_lib_func [] = {
 	{ "snap_pairs",		lua_snap_pairs		 },
 	{ "xlog_pairs",		lua_xlog_pairs		 },
