@@ -4,16 +4,16 @@ Release: 1%{?dist}
 Summary: Templates for Tarantool modules
 Group: Applications/Databases
 License: BSD
-URL: https://github.com/bigbes/migrate
+URL: https://github.com/tarantool/migrate
 Source0: https://github.com/tarantool/%{name}/archive/%{version}/%{name}-%{version}.tar.gz
 BuildRequires: cmake >= 2.8
 BuildRequires: gcc >= 4.5
-BuildRequires: tarantool-devel >= 1.6.8.0
-BuildRequires: msgpuck-devel >= 1.0.2
-BuildRequires: small-devel >= 1.0.1
+BuildRequires: tarantool-devel >= 1.10.0.1
+BuildRequires: msgpuck-devel >= 2.0.35
+BuildRequires: small-devel >= 1.1.70
 BuildRequires: /usr/bin/prove
-Requires: small >= 1.0.1
-# Requires: tarantool >= 1.6.8.0
+Requires: small >= 1.1.70
+Requires: tarantool >= 1.10.0.1
 
 %description
 This package provides a set of Lua, Lua/C and C module templates for Tarantool.

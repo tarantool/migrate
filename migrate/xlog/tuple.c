@@ -16,7 +16,6 @@
 #include "mpstream.h"
 #include "xlog.h"
 
-extern uint32_t CTID_CONST_STRUCT_TUPLE_REF;
 extern struct ibuf xlog_ibuf;
 extern box_tuple_format_t *tuple_format;
 
@@ -26,57 +25,6 @@ mmpstream_tarantool_err(void *error_ctx, const char *err, size_t errlen)
 	say_error("%.*s", (int )errlen, err);
 	struct lua_State *L = (struct lua_State *) error_ctx;
 	luaL_error(L, err);
-}
-
-struct tuple *
-lua_istuple(struct lua_State *L, int narg)
-{
-	assert(CTID_CONST_STRUCT_TUPLE_REF != 0);
-	uint32_t ctypeid;
-	void *data;
-
-	data = luaL_checkcdata(L, narg, &ctypeid);
-	if (ctypeid != CTID_CONST_STRUCT_TUPLE_REF)
-		return NULL;
-
-	return *(struct tuple **) data;
-}
-
-static struct tuple *
-lua_checktuple(struct lua_State *L, int narg)
-{
-	struct tuple *tuple = lua_istuple(L, narg);
-	if (tuple == NULL)  {
-		luaL_error(L, "Invalid argument #%d (box.tuple expected, got %s)",
-		   narg, lua_typename(L, lua_type(L, narg)));
-	}
-
-	return tuple;
-}
-
-static int
-lua_tuple_gc(struct lua_State *L)
-{
-	struct tuple *tuple = lua_checktuple(L, 1);
-	box_tuple_unref(tuple);
-	return 0;
-}
-
-static void
-lua_pushtuple(struct lua_State *L, struct tuple *tuple)
-{
-	assert(CTID_CONST_STRUCT_TUPLE_REF != 0);
-	struct tuple **ptr = (struct tuple **)
-		luaL_pushcdata(L, CTID_CONST_STRUCT_TUPLE_REF);
-	*ptr = tuple;
-	/* The order is important - first reference tuple, next set gc */
-	if (box_tuple_ref(tuple) != 0) {
-		box_error_t *err = box_error_last();
-		luaL_error(L, box_error_message(err));
-		return;
-	}
-	lua_pushcfunction(L, lua_tuple_gc);
-	luaL_setcdatagc(L, -2);
 }
 
 static void
@@ -146,7 +94,7 @@ luatu_tuple_fields(struct lua_State *L, struct tnt_tuple *t,
 	box_tuple_t *tuple = box_tuple_new(tuple_format, stream.buf, stream.pos);
 	if (tuple == NULL)
 		luaL_error(L, "%s: out of memory (box_tuple_new)", __func__);
-	lua_pushtuple(L, tuple);
+	luaT_pushtuple(L, tuple);
 	return;
 }
 
@@ -190,7 +138,7 @@ luatu_key_fields(struct lua_State *L, struct tnt_tuple *t,
 
 	if (tuple == NULL)
 		luaL_error(L, "%s: out of memory (box_tuple_new)", __func__);
-	lua_pushtuple(L, tuple);
+	luaT_pushtuple(L, tuple);
 	return;
 }
 
@@ -259,6 +207,6 @@ luatu_ops_fields(struct lua_State *L, struct tnt_request_update *req,
 	box_tuple_t *tuple = box_tuple_new(tuple_format, stream.buf, stream.pos);
 	if (tuple == NULL)
 		luaL_error(L, "%s: out of memory (box_tuple_new)", __func__);
-	lua_pushtuple(L, tuple);
+	luaT_pushtuple(L, tuple);
 	return;
 }

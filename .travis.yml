@@ -16,15 +16,20 @@ env:
       - TARGET=test
       - OS=el DIST=6
       - OS=el DIST=7
-      - OS=fedora DIST=24
-      - OS=fedora DIST=25
-      - OS=ubuntu DIST=precise
+      - OS=el DIST=8
+      - OS=fedora DIST=28
+      - OS=fedora DIST=28
+      - OS=fedora DIST=29
+      - OS=fedora DIST=30
+      - OS=fedora DIST=31
       - OS=ubuntu DIST=trusty
       - OS=ubuntu DIST=xenial
-      - OS=ubuntu DIST=yakkety
-      - OS=debian DIST=wheezy
+      - OS=ubuntu DIST=bionic
+      - OS=ubuntu DIST=eoan
+      - OS=ubuntu DIST=focal
       - OS=debian DIST=jessie
       - OS=debian DIST=stretch
+      - OS=debian DIST=buster
 
 matrix:
     allow_failures:
@@ -57,7 +62,7 @@ deploy:
   # Deploy packages to PackageCloud
   - provider: packagecloud
     username: tarantool
-    repository: "1_6"
+    repository: "1_10"
     token: ${PACKAGECLOUD_TOKEN}
     dist: ${OS}/${DIST}
     package_glob: build/*.{rpm,deb}
@@ -67,7 +72,7 @@ deploy:
       condition: -n "${OS}" && -n "${DIST}" && -n "${PACKAGECLOUD_TOKEN}"
   - provider: packagecloud
     username: tarantool
-    repository: "1_7"
+    repository: "2x"
     token: ${PACKAGECLOUD_TOKEN}
     dist: ${OS}/${DIST}
     package_glob: build/*.{rpm,deb}
@@ -77,7 +82,27 @@ deploy:
       condition: -n "${OS}" && -n "${DIST}" && -n "${PACKAGECLOUD_TOKEN}"
   - provider: packagecloud
     username: tarantool
-    repository: "1_8"
+    repository: "2_2"
+    token: ${PACKAGECLOUD_TOKEN}
+    dist: ${OS}/${DIST}
+    package_glob: build/*.{rpm,deb}
+    skip_cleanup: true
+    on:
+      branch: master
+      condition: -n "${OS}" && -n "${DIST}" && -n "${PACKAGECLOUD_TOKEN}"
+  - provider: packagecloud
+    username: tarantool
+    repository: "2_3"
+    token: ${PACKAGECLOUD_TOKEN}
+    dist: ${OS}/${DIST}
+    package_glob: build/*.{rpm,deb}
+    skip_cleanup: true
+    on:
+      branch: master
+      condition: -n "${OS}" && -n "${DIST}" && -n "${PACKAGECLOUD_TOKEN}"
+  - provider: packagecloud
+    username: tarantool
+    repository: "2_4"
     token: ${PACKAGECLOUD_TOKEN}
     dist: ${OS}/${DIST}
     package_glob: build/*.{rpm,deb}
