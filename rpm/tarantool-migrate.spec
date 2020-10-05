@@ -5,7 +5,7 @@ Summary: Templates for Tarantool modules
 Group: Applications/Databases
 License: BSD
 URL: https://github.com/tarantool/migrate
-Source0: https://github.com/tarantool/%{name}/archive/%{version}/%{name}-%{version}.tar.gz
+Source0: https://github.com/tarantool/migrate/archive/%{version}.tar.gz
 BuildRequires: cmake >= 2.8
 BuildRequires: gcc >= 4.5
 BuildRequires: tarantool-devel >= 1.10.0.1
