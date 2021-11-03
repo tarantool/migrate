@@ -1,7 +1,7 @@
 package = 'migrate'
 version = 'scm-1'
 source  = {
-    url    = 'git://github.com/tarantool/migrate.git',
+    url    = 'git+https://github.com/tarantool/migrate.git',
     branch = 'master',
 }
 description = {
